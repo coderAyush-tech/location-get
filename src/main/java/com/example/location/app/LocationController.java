@@ -38,14 +38,15 @@ public class LocationController {
         AddressResponse.Address addr = response.getAddress();
         String road = addr.getRoad() != null ? addr.getRoad() : "N/A";
 
-        String formatted = "Road: " + road +
+        String formatted = "Coordinates: (" + lat + ", " + lon + ") | " +
+                "Road: " + road +
                 ", City: " + addr.getCity() +
                 ", State: " + addr.getState() +
                 ", Country: " + addr.getCountry() +
                 ", Postcode: " + addr.getPostcode();
 
-        // ✅ Print in logs only (no DB save)
-        System.out.println("Full Address (Not Saved): " + formatted);
+        // ✅ Print in logs with coordinates
+        System.out.println("Full Address + Coords (Not Saved): " + formatted);
 
         // ❌ Commented out DB save
         // addressRepository.save(new SavedAddress(formatted));
