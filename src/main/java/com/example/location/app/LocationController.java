@@ -9,9 +9,14 @@ import org.springframework.web.client.RestTemplate;
 @RequestMapping("/api")
 @CrossOrigin("*")
 public class LocationController {
+    private final AddressRepository addressRepository;
 
     @Value("${locationiq.token}")
     private String token;
+
+    public LocationController(AddressRepository addressRepository) {
+        this.addressRepository = addressRepository;
+    }
 
     @PostMapping("/location")
     public ResponseEntity<String> receiveLocation(@RequestBody LocationCordinates location) {
@@ -24,6 +29,11 @@ public class LocationController {
         RestTemplate restTemplate = new RestTemplate();
         AddressResponse response = restTemplate.getForObject(url, AddressResponse.class);
 
+        if (response == null || response.getAddress() == null) {
+            System.out.println("No address found for lat=" + lat + ", lon=" + lon);
+            return ResponseEntity.badRequest().body("Invalid response from LocationIQ");
+        }
+
         AddressResponse.Address addr = response.getAddress();
         String road = addr.getRoad() != null ? addr.getRoad() : "N/A";
 
@@ -32,6 +42,10 @@ public class LocationController {
                 ", State: " + addr.getState() +
                 ", Country: " + addr.getCountry() +
                 ", Postcode: " + addr.getPostcode();
+
+        // ✅ Print everything in console
+        System.out.println("Full Address: " + formatted);
+        addressRepository.save(new SavedAddress(formatted));
 
         return ResponseEntity.ok(formatted);
     }
