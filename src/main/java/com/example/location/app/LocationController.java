@@ -49,4 +49,11 @@ public class LocationController {
 
         return ResponseEntity.ok(formatted);
     }
+
+    @GetMapping("/testdb")
+    public ResponseEntity<String> testDb() {
+        SavedAddress test = new SavedAddress("Test Address");
+        addressRepository.save(test);
+        return ResponseEntity.ok("Saved test address with id: " + test.getId());
+    }
 }
