@@ -9,6 +9,7 @@ import org.springframework.web.client.RestTemplate;
 @RequestMapping("/api")
 @CrossOrigin("*")
 public class LocationController {
+
     private final AddressRepository addressRepository;
 
     @Value("${locationiq.token}")
@@ -43,17 +44,20 @@ public class LocationController {
                 ", Country: " + addr.getCountry() +
                 ", Postcode: " + addr.getPostcode();
 
-        // ✅ Print everything in console
-        System.out.println("Full Address: " + formatted);
-        addressRepository.save(new SavedAddress(formatted));
+        // ✅ Print in logs only (no DB save)
+        System.out.println("Full Address (Not Saved): " + formatted);
+
+        // ❌ Commented out DB save
+        // addressRepository.save(new SavedAddress(formatted));
 
         return ResponseEntity.ok(formatted);
     }
 
-    @GetMapping("/testdb")
-    public ResponseEntity<String> testDb() {
-        SavedAddress test = new SavedAddress("Test Address");
-        addressRepository.save(test);
-        return ResponseEntity.ok("Saved test address with id: " + test.getId());
-    }
+    // Optional test endpoint (commented out)
+    // @GetMapping("/testdb")
+    // public ResponseEntity<String> testDb() {
+    //     SavedAddress test = new SavedAddress("Test Address");
+    //     addressRepository.save(test);
+    //     return ResponseEntity.ok("Saved test address with id: " + test.getId());
+    // }
 }
