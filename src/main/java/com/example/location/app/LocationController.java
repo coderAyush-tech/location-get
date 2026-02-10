@@ -49,16 +49,16 @@ public class LocationController {
         System.out.println("Full Address + Coords (Not Saved): " + formatted);
 
         // ❌ Commented out DB save
-        // addressRepository.save(new SavedAddress(formatted));
+         addressRepository.save(new SavedAddress(formatted));
 
         return ResponseEntity.ok(formatted);
     }
 
     // Optional test endpoint (commented out)
-    // @GetMapping("/testdb")
-    // public ResponseEntity<String> testDb() {
-    //     SavedAddress test = new SavedAddress("Test Address");
-    //     addressRepository.save(test);
-    //     return ResponseEntity.ok("Saved test address with id: " + test.getId());
-    // }
+     @GetMapping("/testdb")
+     public ResponseEntity<String> testDb() {
+         SavedAddress test = new SavedAddress("Test Address");
+         addressRepository.save(test);
+         return ResponseEntity.ok("Saved test address with id: " + test.getId());
+     }
 }
