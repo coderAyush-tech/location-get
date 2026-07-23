@@ -1,64 +1,41 @@
 package com.example.location.app;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin("*")
+@CrossOrigin(origins = "${app.cors.allowed-origins}")
 public class LocationController {
+    private final LocationService locationService;
+    private final GeoIpService geoIpService;
 
-    private final AddressRepository addressRepository;
-
-    @Value("${locationiq.token}")
-    private String token;
-
-    public LocationController(AddressRepository addressRepository) {
-        this.addressRepository = addressRepository;
+    public LocationController(LocationService locationService, GeoIpService geoIpService) {
+        this.locationService = locationService;
+        this.geoIpService = geoIpService;
     }
 
     @PostMapping("/location")
-    public ResponseEntity<String> receiveLocation(@RequestBody LocationCordinates location) {
-        double lat = location.getLatitude();
-        double lon = location.getLongitude();
-
-        String url = "https://us1.locationiq.com/v1/reverse?key=" + token
-                + "&lat=" + lat + "&lon=" + lon + "&format=json";
-
-        RestTemplate restTemplate = new RestTemplate();
-        AddressResponse response = restTemplate.getForObject(url, AddressResponse.class);
-
-        if (response == null || response.getAddress() == null) {
-            System.out.println("No address found for lat=" + lat + ", lon=" + lon);
-            return ResponseEntity.badRequest().body("Invalid response from LocationIQ");
-        }
-
-        AddressResponse.Address addr = response.getAddress();
-        String road = addr.getRoad() != null ? addr.getRoad() : "N/A";
-
-        String formatted = "Coordinates: (" + lat + ", " + lon + ") | " +
-                "Road: " + road +
-                ", City: " + addr.getCity() +
-                ", State: " + addr.getState() +
-                ", Country: " + addr.getCountry() +
-                ", Postcode: " + addr.getPostcode();
-
-        // ✅ Print in logs with coordinates
-        System.out.println("Full Address + Coords (Not Saved): " + formatted);
-
-        // ❌ Commented out DB save
-         addressRepository.save(new SavedAddress(formatted));
-
-        return ResponseEntity.ok(formatted);
+    public ResponseEntity<LocationResponse> receiveLocation(@Valid @RequestBody LocationCordinates location) {
+        return ResponseEntity.ok(locationService.reverseGeocode(location));
     }
 
-    // Optional test endpoint (commented out)
-     @GetMapping("/testdb")
-     public ResponseEntity<String> testDb() {
-         SavedAddress test = new SavedAddress("Test Address");
-         addressRepository.save(test);
-         return ResponseEntity.ok("Saved test address with id: " + test.getId());
-     }
+    /**
+     * Call this only after the browser reports that precise location permission was denied.
+     * IP geolocation is an estimate (normally city/region), not an exact user location.
+     */
+    @PostMapping("/location/fallback")
+    public ResponseEntity<LocationResponse> locationFallback(HttpServletRequest request) {
+        String clientIp = request.getRemoteAddr();
+        LocationResponse result = geoIpService.locate(clientIp);
+        return ResponseEntity.status(HttpStatus.OK).body(result);
+    }
 }
