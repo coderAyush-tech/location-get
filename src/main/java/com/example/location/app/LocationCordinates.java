@@ -1,21 +1,22 @@
 package com.example.location.app;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
+
 public class LocationCordinates {
-    private double latitude;
-    private double longitude;
+    @NotNull
+    @DecimalMin(value = "-90.0")
+    @DecimalMax(value = "90.0")
+    private Double latitude;
 
-    // getters and setters
-    public double getLatitude() {
-        return latitude;
-    }
-    public void setLatitude(double latitude) {
-        this.latitude = latitude;
-    }
+    @NotNull
+    @DecimalMin(value = "-180.0")
+    @DecimalMax(value = "180.0")
+    private Double longitude;
 
-    public double getLongitude() {
-        return longitude;
-    }
-    public void setLongitude(double longitude) {
-        this.longitude = longitude;
-    }
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
 }
