@@ -24,8 +24,9 @@ public class LocationController {
     }
 
     @PostMapping("/location")
-    public ResponseEntity<LocationResponse> receiveLocation(@Valid @RequestBody LocationCordinates location) {
-        return ResponseEntity.ok(locationService.reverseGeocode(location));
+    public ResponseEntity<LocationResponse> receiveLocation(@Valid @RequestBody LocationCordinates location,
+                                                            HttpServletRequest request) {
+        return ResponseEntity.ok(locationService.reverseGeocode(location, request.getRemoteAddr()));
     }
 
     /**

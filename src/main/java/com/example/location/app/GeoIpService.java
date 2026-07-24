@@ -1,6 +1,7 @@
 package com.example.location.app;
 
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -13,8 +14,13 @@ import java.net.UnknownHostException;
 @Service
 public class GeoIpService {
     private final RestTemplate restTemplate;
+    private final AddressRepository addressRepository;
+    private final boolean storeLocations;
 
-    public GeoIpService() {
+    public GeoIpService(AddressRepository addressRepository,
+                        @Value("${app.location.store-enabled:true}") boolean storeLocations) {
+        this.addressRepository = addressRepository;
+        this.storeLocations = storeLocations;
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(5_000);
         requestFactory.setReadTimeout(8_000);
@@ -36,8 +42,13 @@ public class GeoIpService {
             }
             String address = String.join(", ", valueOrUnknown(response.getCity()), valueOrUnknown(response.getRegion()),
                     valueOrUnknown(response.getCountry()));
-            return new LocationResponse(response.getLatitude(), response.getLongitude(), address, "ip",
+            LocationResponse result = new LocationResponse(response.getLatitude(), response.getLongitude(), address, "ip",
                     "Estimated from public IP; accuracy is normally city or region level, not an exact address");
+            if (storeLocations) {
+                addressRepository.save(new SavedAddress(result.address(), result.latitude(), result.longitude(),
+                        result.source(), clientIp));
+            }
+            return result;
         } catch (RestClientException exception) {
             throw new LocationLookupException("IP geolocation is temporarily unavailable", exception);
         }

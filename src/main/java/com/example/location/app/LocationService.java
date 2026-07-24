@@ -29,40 +29,48 @@ public class LocationService {
         this.restTemplate = new RestTemplate(requestFactory);
     }
 
-    public LocationResponse reverseGeocode(LocationCordinates location) {
+    public LocationResponse reverseGeocode(LocationCordinates location, String clientIp) {
+        LocationResponse result;
         if (token.isBlank()) {
-            throw new LocationLookupException("Location service is not configured");
+            result = fallbackResponse(location, "Address lookup is not configured; coordinates were saved");
+            save(result, clientIp);
+            return result;
         }
-
-        URI uri = UriComponentsBuilder.fromUriString("https://us1.locationiq.com/v1/reverse")
-                .queryParam("key", token)
-                .queryParam("lat", location.getLatitude())
-                .queryParam("lon", location.getLongitude())
-                .queryParam("format", "json")
-                .build()
-                .encode()
-                .toUri();
-
         try {
+            URI uri = UriComponentsBuilder.fromUriString("https://us1.locationiq.com/v1/reverse")
+                    .queryParam("key", token)
+                    .queryParam("lat", location.getLatitude())
+                    .queryParam("lon", location.getLongitude())
+                    .queryParam("format", "json")
+                    .build()
+                    .encode()
+                    .toUri();
             AddressResponse response = restTemplate.getForObject(uri, AddressResponse.class);
             if (response == null || response.getAddress() == null) {
-                throw new LocationLookupException("No address found for these coordinates");
+                result = fallbackResponse(location, "No address found; coordinates were saved");
+            } else {
+                String address = response.getDisplay_name();
+                if (address == null || address.isBlank()) {
+                    address = formatAddress(response.getAddress());
+                }
+                result = new LocationResponse(location.getLatitude(), location.getLongitude(), address, "gps",
+                        "Precise browser-provided coordinates");
             }
-
-            String address = response.getDisplay_name();
-            if (address == null || address.isBlank()) {
-                address = formatAddress(response.getAddress());
-            }
-            LocationResponse result = new LocationResponse(
-                    location.getLatitude(), location.getLongitude(), address, "gps",
-                    "Precise browser-provided coordinates");
-
-            if (storeLocations) {
-                addressRepository.save(new SavedAddress(address));
-            }
-            return result;
         } catch (RestClientException exception) {
-            throw new LocationLookupException("Location lookup is temporarily unavailable", exception);
+            result = fallbackResponse(location, "Address lookup is unavailable; coordinates were saved");
+        }
+        save(result, clientIp);
+        return result;
+    }
+
+    private LocationResponse fallbackResponse(LocationCordinates location, String note) {
+        return new LocationResponse(location.getLatitude(), location.getLongitude(), "Address unavailable", "gps", note);
+    }
+
+    private void save(LocationResponse location, String clientIp) {
+        if (storeLocations) {
+            addressRepository.save(new SavedAddress(location.address(), location.latitude(), location.longitude(),
+                    location.source(), clientIp));
         }
     }
 
