@@ -10,8 +10,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.web.bind.annotation.CrossOrigin;
+
 @RestController
 @RequestMapping("/api")
+@CrossOrigin(
+        origins = {
+                "https://bestue.netlify.app",
+                "http://localhost:5173"
+        },
+        allowedHeaders = "*"
+)
 public class LocationController {
     private final LocationService locationService;
     private final GeoIpService geoIpService;
