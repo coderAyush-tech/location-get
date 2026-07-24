@@ -2,15 +2,12 @@ package com.example.location.app;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import org.springframework.web.bind.annotation.CrossOrigin;
 
 @RestController
 @RequestMapping("/api")
@@ -22,6 +19,7 @@ import org.springframework.web.bind.annotation.CrossOrigin;
         allowedHeaders = "*"
 )
 public class LocationController {
+
     private final LocationService locationService;
     private final GeoIpService geoIpService;
 
@@ -31,19 +29,43 @@ public class LocationController {
     }
 
     @PostMapping("/location")
-    public ResponseEntity<LocationResponse> receiveLocation(@Valid @RequestBody LocationCordinates location,
-                                                            HttpServletRequest request) {
-        return ResponseEntity.ok(locationService.reverseGeocode(location, request.getRemoteAddr()));
+    public ResponseEntity<LocationResponse> receiveLocation(
+            @Valid @RequestBody LocationCordinates location,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.ok(
+                locationService.reverseGeocode(location, getClientIp(request))
+        );
     }
 
     /**
-     * Call this only after the browser reports that precise location permission was denied.
-     * IP geolocation is an estimate (normally city/region), not an exact user location.
+     * Called only when the browser user denies precise-location permission.
+     * Uses the actual visitor IP received through Netlify/Render proxy headers.
      */
     @PostMapping("/location/fallback")
     public ResponseEntity<LocationResponse> locationFallback(HttpServletRequest request) {
-        String clientIp = request.getRemoteAddr();
-        LocationResponse result = geoIpService.locate(clientIp);
-        return ResponseEntity.status(HttpStatus.OK).body(result);
+        return ResponseEntity.ok(
+                geoIpService.locate(getClientIp(request))
+        );
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            String clientIp = forwardedFor.split(",")[0].trim();
+
+            if (!clientIp.isBlank() && !"unknown".equalsIgnoreCase(clientIp)) {
+                return clientIp;
+            }
+        }
+
+        String realIp = request.getHeader("X-Real-IP");
+
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+
+        return request.getRemoteAddr();
     }
 }
