@@ -49,7 +49,9 @@ public class GeoIpService {
     private GeoIpResponse lookup(String clientIp) {
         List<URI> providers = List.of(
                 UriComponentsBuilder.fromUriString("https://ipwho.is/{ip}").buildAndExpand(clientIp).encode().toUri(),
-                UriComponentsBuilder.fromUriString("https://ipapi.co/{ip}/json/").buildAndExpand(clientIp).encode().toUri()
+                UriComponentsBuilder.fromUriString("https://ipapi.co/{ip}/json/").buildAndExpand(clientIp).encode().toUri(),
+                UriComponentsBuilder.fromUriString("https://ipinfo.io/{ip}/json").buildAndExpand(clientIp).encode().toUri(),
+                UriComponentsBuilder.fromUriString("https://ipwhois.app/json/{ip}").buildAndExpand(clientIp).encode().toUri()
         );
 
         for (URI provider : providers) {
@@ -72,6 +74,16 @@ public class GeoIpService {
         }
         Double latitude = number(response.get("latitude"));
         Double longitude = number(response.get("longitude"));
+        if (latitude == null || longitude == null) {
+            String coordinates = string(response.get("loc"));
+            if (coordinates != null) {
+                String[] parts = coordinates.split(",", 2);
+                if (parts.length == 2) {
+                    latitude = number(parts[0]);
+                    longitude = number(parts[1]);
+                }
+            }
+        }
         if (latitude == null || longitude == null) {
             return null;
         }
