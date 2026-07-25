@@ -27,12 +27,14 @@ public class GeoIpService {
         this.addressRepository = addressRepository;
         this.storeLocations = storeLocations;
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(5_000);
-        requestFactory.setReadTimeout(8_000);
+        // The frontend gives up after 15 seconds. Keep all provider attempts within that budget.
+        requestFactory.setConnectTimeout(2_000);
+        requestFactory.setReadTimeout(2_500);
         this.restTemplate = new RestTemplate(requestFactory);
     }
 
     public LocationResponse locate(String clientIp) {
+        log.info("GEO_IP_LOOKUP_STARTED clientIp={}", clientIp);
         if (!isPublicAddress(clientIp)) {
             throw new LocationLookupException("A public client IP address is required for IP geolocation");
         }
@@ -43,10 +45,18 @@ public class GeoIpService {
         LocationResponse result = new LocationResponse(geoIp.latitude(), geoIp.longitude(), address, "ip",
                 "Estimated from public IP; accuracy is normally city or region level, not an exact address", clientIp);
         if (storeLocations) {
+            try {
             SavedAddress saved = addressRepository.save(new SavedAddress(result.address(), result.latitude(), result.longitude(),
                     result.source(), clientIp));
             log.info("MONGO_SAVE_SUCCESS source={} clientIp={} latitude={} longitude={} address={} id={}",
                     result.source(), clientIp, result.latitude(), result.longitude(), result.address(), saved.getId());
+            } catch (org.springframework.dao.DataAccessException exception) {
+                // Return the IP result even when MongoDB is temporarily unreachable.
+                log.error("MONGO_SAVE_FAILED source={} clientIp={} type={} message={}", result.source(), clientIp,
+                        exception.getClass().getSimpleName(), exception.getMessage());
+                return new LocationResponse(result.latitude(), result.longitude(), result.address(), result.source(),
+                        result.accuracyNote() + " Database storage is temporarily unavailable.", clientIp);
+            }
         }
         return result;
     }
@@ -64,10 +74,13 @@ public class GeoIpService {
                 Map<?, ?> response = restTemplate.getForObject(provider, Map.class);
                 GeoIpResponse result = mapResponse(response);
                 if (result != null) {
+                    log.info("GEO_IP_PROVIDER_SUCCESS provider={} clientIp={}", provider.getHost(), clientIp);
                     return result;
                 }
-            } catch (RestClientException ignored) {
+            } catch (RestClientException exception) {
                 // Try the independent provider before reporting a temporary failure.
+                log.warn("GEO_IP_PROVIDER_FAILED provider={} clientIp={} type={}", provider.getHost(), clientIp,
+                        exception.getClass().getSimpleName());
             }
         }
         throw new LocationLookupException("IP geolocation is temporarily unavailable");

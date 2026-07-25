@@ -34,7 +34,7 @@ public class MongoConnectionLogger {
 
     private void logConfiguration() {
         String mongoEnvironmentUri = environment.getProperty("MONGODB_URI");
-        String resolvedUri = environment.getProperty("spring.data.mongodb.uri");
+        String resolvedUri = environment.getProperty("spring.mongodb.uri");
         String hosts = "unavailable";
 
         try {

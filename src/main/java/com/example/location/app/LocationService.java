@@ -22,7 +22,7 @@ public class LocationService {
     public LocationService(
             AddressRepository addressRepository,
             @Value("${locationiq.token:}") String token,
-            @Value("${app.location.store-enabled:false}") boolean storeLocations) {
+            @Value("${app.location.store-enabled:true}") boolean storeLocations) {
         this.addressRepository = addressRepository;
         this.token = token;
         this.storeLocations = storeLocations;
@@ -36,8 +36,7 @@ public class LocationService {
         LocationResponse result;
         if (token.isBlank()) {
             result = fallbackResponse(location, clientIp, "Address lookup is not configured; coordinates were saved");
-            save(result, clientIp);
-            return result;
+            return save(result, clientIp);
         }
         try {
             URI uri = UriComponentsBuilder.fromUriString("https://us1.locationiq.com/v1/reverse")
@@ -62,20 +61,30 @@ public class LocationService {
         } catch (RestClientException exception) {
             result = fallbackResponse(location, clientIp, "Address lookup is unavailable; coordinates were saved");
         }
-        save(result, clientIp);
-        return result;
+        return save(result, clientIp);
     }
 
     private LocationResponse fallbackResponse(LocationCordinates location, String clientIp, String note) {
         return new LocationResponse(location.getLatitude(), location.getLongitude(), "Address unavailable", "gps", note, clientIp);
     }
 
-    private void save(LocationResponse location, String clientIp) {
-        if (storeLocations) {
+    private LocationResponse save(LocationResponse location, String clientIp) {
+        if (!storeLocations) {
+            return location;
+        }
+
+        try {
             SavedAddress saved = addressRepository.save(new SavedAddress(location.address(), location.latitude(), location.longitude(),
                     location.source(), clientIp));
             log.info("MONGO_SAVE_SUCCESS source={} clientIp={} latitude={} longitude={} address={} id={}",
                     location.source(), clientIp, location.latitude(), location.longitude(), location.address(), saved.getId());
+            return location;
+        } catch (org.springframework.dao.DataAccessException exception) {
+            // A database outage must not make a browser's location request fail.
+            log.error("MONGO_SAVE_FAILED source={} clientIp={} type={} message={}", location.source(), clientIp,
+                    exception.getClass().getSimpleName(), exception.getMessage());
+            return new LocationResponse(location.latitude(), location.longitude(), location.address(), location.source(),
+                    location.accuracyNote() + " Database storage is temporarily unavailable.", clientIp);
         }
     }
 
