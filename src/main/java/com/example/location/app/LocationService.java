@@ -6,11 +6,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 
 @Service
 public class LocationService {
+    private static final Logger log = LoggerFactory.getLogger(LocationService.class);
     private final AddressRepository addressRepository;
     private final RestTemplate restTemplate;
     private final String token;
@@ -32,7 +35,7 @@ public class LocationService {
     public LocationResponse reverseGeocode(LocationCordinates location, String clientIp) {
         LocationResponse result;
         if (token.isBlank()) {
-            result = fallbackResponse(location, "Address lookup is not configured; coordinates were saved");
+            result = fallbackResponse(location, clientIp, "Address lookup is not configured; coordinates were saved");
             save(result, clientIp);
             return result;
         }
@@ -47,30 +50,32 @@ public class LocationService {
                     .toUri();
             AddressResponse response = restTemplate.getForObject(uri, AddressResponse.class);
             if (response == null || response.getAddress() == null) {
-                result = fallbackResponse(location, "No address found; coordinates were saved");
+                result = fallbackResponse(location, clientIp, "No address found; coordinates were saved");
             } else {
                 String address = response.getDisplay_name();
                 if (address == null || address.isBlank()) {
                     address = formatAddress(response.getAddress());
                 }
                 result = new LocationResponse(location.getLatitude(), location.getLongitude(), address, "gps",
-                        "Precise browser-provided coordinates");
+                        "Precise browser-provided coordinates", clientIp);
             }
         } catch (RestClientException exception) {
-            result = fallbackResponse(location, "Address lookup is unavailable; coordinates were saved");
+            result = fallbackResponse(location, clientIp, "Address lookup is unavailable; coordinates were saved");
         }
         save(result, clientIp);
         return result;
     }
 
-    private LocationResponse fallbackResponse(LocationCordinates location, String note) {
-        return new LocationResponse(location.getLatitude(), location.getLongitude(), "Address unavailable", "gps", note);
+    private LocationResponse fallbackResponse(LocationCordinates location, String clientIp, String note) {
+        return new LocationResponse(location.getLatitude(), location.getLongitude(), "Address unavailable", "gps", note, clientIp);
     }
 
     private void save(LocationResponse location, String clientIp) {
         if (storeLocations) {
-            addressRepository.save(new SavedAddress(location.address(), location.latitude(), location.longitude(),
+            SavedAddress saved = addressRepository.save(new SavedAddress(location.address(), location.latitude(), location.longitude(),
                     location.source(), clientIp));
+            log.info("MONGO_SAVE_SUCCESS source={} clientIp={} latitude={} longitude={} address={} id={}",
+                    location.source(), clientIp, location.latitude(), location.longitude(), location.address(), saved.getId());
         }
     }
 

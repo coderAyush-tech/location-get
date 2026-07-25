@@ -5,5 +5,6 @@ public record LocationResponse(
         double longitude,
         String address,
         String source,
-        String accuracyNote) {
+        String accuracyNote,
+        String clientIp) {
 }

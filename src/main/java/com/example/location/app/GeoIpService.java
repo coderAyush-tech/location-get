@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
 import java.net.URI;
@@ -15,6 +17,7 @@ import java.util.Map;
 
 @Service
 public class GeoIpService {
+    private static final Logger log = LoggerFactory.getLogger(GeoIpService.class);
     private final RestTemplate restTemplate;
     private final AddressRepository addressRepository;
     private final boolean storeLocations;
@@ -38,10 +41,12 @@ public class GeoIpService {
         String address = String.join(", ", valueOrUnknown(geoIp.city()), valueOrUnknown(geoIp.region()),
                 valueOrUnknown(geoIp.country()));
         LocationResponse result = new LocationResponse(geoIp.latitude(), geoIp.longitude(), address, "ip",
-                "Estimated from public IP; accuracy is normally city or region level, not an exact address");
+                "Estimated from public IP; accuracy is normally city or region level, not an exact address", clientIp);
         if (storeLocations) {
-            addressRepository.save(new SavedAddress(result.address(), result.latitude(), result.longitude(),
+            SavedAddress saved = addressRepository.save(new SavedAddress(result.address(), result.latitude(), result.longitude(),
                     result.source(), clientIp));
+            log.info("MONGO_SAVE_SUCCESS source={} clientIp={} latitude={} longitude={} address={} id={}",
+                    result.source(), clientIp, result.latitude(), result.longitude(), result.address(), saved.getId());
         }
         return result;
     }
