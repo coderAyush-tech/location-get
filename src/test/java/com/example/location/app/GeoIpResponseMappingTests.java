@@ -29,6 +29,15 @@ class GeoIpResponseMappingTests {
     }
 
     @Test
+    void mapsIpInfoResponse() {
+        GeoIpResponse response = GeoIpService.mapResponse(Map.of(
+                "loc", "28.61,77.20", "city", "New Delhi", "region", "Delhi", "country", "IN"));
+
+        assertEquals(28.61, response.latitude());
+        assertEquals(77.20, response.longitude());
+    }
+
+    @Test
     void rejectsProviderError() {
         assertNull(GeoIpService.mapResponse(Map.of("error", true, "reason", "rate limited")));
     }
