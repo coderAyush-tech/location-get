@@ -12,6 +12,26 @@ These contracts remain unchanged:
 
 ## Photo-session APIs
 
+### Direct Gemini flow (recommended)
+
+The frontend keeps the captured original in browser memory and sends it directly
+to the backend for Gemini enhancement:
+
+```http
+POST /api/v1/photo-enhancements
+Content-Type: multipart/form-data
+
+photo=<required JPEG, PNG, or WebP file>
+```
+
+Success returns `200 OK` with the enhanced binary image body and its image
+`Content-Type`. Errors retain the existing JSON `ProblemDetail` contract. This
+flow does not require Cloudinary and does not persist original or enhanced
+image bytes. The frontend should create local object URLs for the original and
+enhanced blobs, and revoke them when no longer needed.
+
+### Legacy stored-session flow
+
 Create a session:
 
 ```http
@@ -50,12 +70,12 @@ seconds until the session becomes `COMPLETED` or `FAILED`.
 - `MONGODB_URI`
 - `MONGODB_DATABASE`
 - `CORS_ALLOWED_ORIGIN_PATTERNS`
-- `CLOUDINARY_CLOUD_NAME`
-- `CLOUDINARY_UPLOAD_PRESET` (recommended simple upload mode)
 - `GEMINI_API_KEY`
 - `GEMINI_IMAGE_MODEL` (defaults to `gemini-3.1-flash-image`)
 
-Alternatively, omit `CLOUDINARY_UPLOAD_PRESET` and provide
+Cloudinary is not required by the direct endpoint. The legacy stored-session
+flow can optionally use `CLOUDINARY_CLOUD_NAME` with
+`CLOUDINARY_UPLOAD_PRESET`. Alternatively, omit the preset and provide
 `CLOUDINARY_API_KEY` plus `CLOUDINARY_API_SECRET` for signed uploads. When an
 upload preset is configured it takes precedence, so invalid legacy credentials
 do not block uploads. Without valid signed credentials, best-effort deletion of
