@@ -94,7 +94,7 @@ public class CloudinaryImageStorageService implements ImageStorageService {
 
     @Override
     public void delete(String storageId) {
-        if (storageId == null || storageId.isBlank() || !isConfigured()) {
+        if (storageId == null || storageId.isBlank() || !hasSignedCredentials()) {
             return;
         }
         try {
@@ -122,18 +122,24 @@ public class CloudinaryImageStorageService implements ImageStorageService {
             String contentType
     ) {
         ensureConfigured();
-        String storageId = "photogenius/sessions/" + sessionId + "/" + kind + "/" + UUID.randomUUID();
+        String assetFolder = "photogenius/sessions/" + sessionId + "/" + kind;
+        String storageId = assetFolder + "/" + UUID.randomUUID();
 
         try {
-            Map<String, Object> signedParameters = signedParameters(Map.of(
-                    "overwrite", "false",
-                    "public_id", storageId
-            ));
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             body.add("file", new NamedByteArrayResource(imageBytes, extension(contentType)));
-            body.add("public_id", storageId);
-            body.add("overwrite", "false");
-            addAuthentication(body, signedParameters);
+            if (usesUnsignedPreset()) {
+                body.add("upload_preset", credential(properties.getUploadPreset()));
+                body.add("folder", assetFolder);
+            } else {
+                Map<String, Object> signedParameters = signedParameters(Map.of(
+                        "overwrite", "false",
+                        "public_id", storageId
+                ));
+                body.add("public_id", storageId);
+                body.add("overwrite", "false");
+                addAuthentication(body, signedParameters);
+            }
 
             Map<?, ?> response = restClient.post()
                     .uri(apiUrl("upload"))
@@ -148,6 +154,8 @@ public class CloudinaryImageStorageService implements ImageStorageService {
                 throw new PhotoApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
                         "Image storage returned an invalid response.");
             }
+            log.info("CLOUDINARY_UPLOAD_SUCCESS mode={} cloudName={} publicId={}",
+                    uploadMode(), credential(properties.getCloudName()), publicId);
             return new StoredImage(secureUrl, publicId, contentType);
         } catch (RestClientResponseException exception) {
             logProviderFailure("upload", exception);
@@ -234,16 +242,29 @@ public class CloudinaryImageStorageService implements ImageStorageService {
     }
 
     private void ensureConfigured() {
-        if (!isConfigured()) {
+        if (!isUploadConfigured()) {
             throw new PhotoApiException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
                     "Image storage is not configured.");
         }
     }
 
-    private boolean isConfigured() {
+    private boolean isUploadConfigured() {
+        return notBlank(properties.getCloudName())
+                && (usesUnsignedPreset() || hasSignedCredentials());
+    }
+
+    private boolean usesUnsignedPreset() {
+        return notBlank(properties.getUploadPreset());
+    }
+
+    private boolean hasSignedCredentials() {
         return notBlank(properties.getCloudName())
                 && notBlank(properties.getApiKey())
                 && notBlank(properties.getApiSecret());
+    }
+
+    private String uploadMode() {
+        return usesUnsignedPreset() ? "unsigned-preset" : "signed";
     }
 
     private boolean notBlank(String value) {

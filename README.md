@@ -51,10 +51,15 @@ seconds until the session becomes `COMPLETED` or `FAILED`.
 - `MONGODB_DATABASE`
 - `CORS_ALLOWED_ORIGIN_PATTERNS`
 - `CLOUDINARY_CLOUD_NAME`
-- `CLOUDINARY_API_KEY`
-- `CLOUDINARY_API_SECRET`
+- `CLOUDINARY_UPLOAD_PRESET` (recommended simple upload mode)
 - `GEMINI_API_KEY`
 - `GEMINI_IMAGE_MODEL` (defaults to `gemini-3.1-flash-image`)
+
+Alternatively, omit `CLOUDINARY_UPLOAD_PRESET` and provide
+`CLOUDINARY_API_KEY` plus `CLOUDINARY_API_SECRET` for signed uploads. When an
+upload preset is configured it takes precedence, so invalid legacy credentials
+do not block uploads. Without valid signed credentials, best-effort deletion of
+orphaned Cloudinary assets is unavailable.
 
 See [.env.example](.env.example) for optional limits and timeout settings.
 Never expose Cloudinary or Gemini credentials in frontend code.

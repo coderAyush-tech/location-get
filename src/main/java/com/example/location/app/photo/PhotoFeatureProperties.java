@@ -90,6 +90,7 @@ public class PhotoFeatureProperties {
         private String cloudName = "";
         private String apiKey = "";
         private String apiSecret = "";
+        private String uploadPreset = "";
         private int connectTimeoutMillis = 5_000;
         private int readTimeoutMillis = 45_000;
 
@@ -115,6 +116,14 @@ public class PhotoFeatureProperties {
 
         public void setApiSecret(String apiSecret) {
             this.apiSecret = apiSecret;
+        }
+
+        public String getUploadPreset() {
+            return uploadPreset;
+        }
+
+        public void setUploadPreset(String uploadPreset) {
+            this.uploadPreset = uploadPreset;
         }
 
         public int getConnectTimeoutMillis() {

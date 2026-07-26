@@ -13,6 +13,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -51,16 +53,12 @@ class CloudinaryImageStorageServiceTests {
         server.expect(once(), requestTo(
                         "https://api.cloudinary.com/v1_1/test-cloud/image/upload"))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.MULTIPART_FORM_DATA))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(
-                        "name=\"api_key\"")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(
-                        "test-api-key")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(
-                        "name=\"timestamp\"")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                .andExpect(content().string(containsString("name=\"api_key\"")))
+                .andExpect(content().string(containsString("test-api-key")))
+                .andExpect(content().string(containsString("name=\"timestamp\"")))
+                .andExpect(content().string(containsString(
                         String.valueOf(FIXED_TIME.getEpochSecond()))))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(
-                        "name=\"signature\"")))
+                .andExpect(content().string(containsString("name=\"signature\"")))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
 
         StoredImage stored = service.uploadOriginal(
@@ -78,6 +76,48 @@ class CloudinaryImageStorageServiceTests {
                 stored.storageId()
         );
         server.verify();
+    }
+
+    @Test
+    void unsignedPresetUploadsWithoutApiCredentials() {
+        PhotoFeatureProperties properties = new PhotoFeatureProperties();
+        properties.getCloudinary().setCloudName("pixelart");
+        properties.getCloudinary().setUploadPreset("photogenius_unsigned");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer unsignedServer = MockRestServiceServer.bindTo(builder).build();
+        CloudinaryImageStorageService unsignedService = new CloudinaryImageStorageService(
+                properties,
+                builder.build(),
+                Clock.fixed(FIXED_TIME, ZoneOffset.UTC)
+        );
+        String response = """
+                {
+                  "secure_url": "https://res.cloudinary.com/pixelart/image/upload/generated.jpg",
+                  "public_id": "photogenius/sessions/session-2/original/generated"
+                }
+                """;
+        unsignedServer.expect(once(), requestTo(
+                        "https://api.cloudinary.com/v1_1/pixelart/image/upload"))
+                .andExpect(content().string(containsString("name=\"upload_preset\"")))
+                .andExpect(content().string(containsString("photogenius_unsigned")))
+                .andExpect(content().string(containsString("name=\"folder\"")))
+                .andExpect(content().string(containsString(
+                        "photogenius/sessions/session-2/original")))
+                .andExpect(content().string(not(containsString("name=\"api_key\""))))
+                .andExpect(content().string(not(containsString("name=\"signature\""))))
+                .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
+
+        StoredImage stored = unsignedService.uploadOriginal(
+                "session-2",
+                new byte[]{1, 2, 3},
+                "image/jpeg"
+        );
+
+        assertEquals(
+                "https://res.cloudinary.com/pixelart/image/upload/generated.jpg",
+                stored.url()
+        );
+        unsignedServer.verify();
     }
 
     @Test
