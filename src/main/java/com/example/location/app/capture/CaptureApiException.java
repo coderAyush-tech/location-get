@@ -1,16 +1,16 @@
-package com.example.location.app.photo;
+package com.example.location.app.capture;
 
 import org.springframework.http.HttpStatus;
 
-public class PhotoApiException extends RuntimeException {
+public class CaptureApiException extends RuntimeException {
     private final HttpStatus status;
 
-    public PhotoApiException(HttpStatus status, String message) {
+    public CaptureApiException(HttpStatus status, String message) {
         super(message);
         this.status = status;
     }
 
-    public PhotoApiException(HttpStatus status, String message, Throwable cause) {
+    public CaptureApiException(HttpStatus status, String message, Throwable cause) {
         super(message, cause);
         this.status = status;
     }

@@ -26,7 +26,7 @@ public class LocationController {
             HttpServletRequest request
     ) {
         return ResponseEntity.ok(
-                locationService.reverseGeocode(location, getClientIp(request))
+                locationService.reverseGeocode(location, ClientIpResolver.resolve(request))
         );
     }
 
@@ -37,27 +37,7 @@ public class LocationController {
     @PostMapping("/location/fallback")
     public ResponseEntity<LocationResponse> locationFallback(HttpServletRequest request) {
         return ResponseEntity.ok(
-                geoIpService.locate(getClientIp(request))
+                geoIpService.locate(ClientIpResolver.resolve(request))
         );
-    }
-
-    private String getClientIp(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-
-        if (forwardedFor != null && !forwardedFor.isBlank()) {
-            String clientIp = forwardedFor.split(",")[0].trim();
-
-            if (!clientIp.isBlank() && !"unknown".equalsIgnoreCase(clientIp)) {
-                return clientIp;
-            }
-        }
-
-        String realIp = request.getHeader("X-Real-IP");
-
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp.trim();
-        }
-
-        return request.getRemoteAddr();
     }
 }

@@ -1,102 +1,67 @@
-# PhotoGenius AI backend
+# Camera capture backend
 
-Spring Boot backend for the existing GPS/IP location APIs and the additive
-photo-session image-enhancement flow.
+Spring Boot backend for a simple consent-based camera flow. The browser captures
+a photo, requests location permission at the same time, and uploads the photo
+plus any available coordinates. The backend stores the original image bytes and
+location metadata directly in MongoDB.
 
-## Existing APIs
+Cloudinary and Gemini are not used.
 
-These contracts remain unchanged:
-
-- `POST /api/location`
-- `POST /api/location/fallback`
-
-## Photo-session APIs
-
-### Direct Gemini flow (recommended)
-
-The frontend keeps the captured original in browser memory and sends it directly
-to the backend for Gemini enhancement:
+## Camera upload API
 
 ```http
-POST /api/v1/photo-enhancements
+POST /api/v1/captures
 Content-Type: multipart/form-data
 
 photo=<required JPEG, PNG, or WebP file>
-```
-
-Success returns `200 OK` with the enhanced binary image body and its image
-`Content-Type`. Errors retain the existing JSON `ProblemDetail` contract. This
-flow does not require Cloudinary and does not persist original or enhanced
-image bytes. The frontend should create local object URLs for the original and
-enhanced blobs, and revoke them when no longer needed.
-
-### Legacy stored-session flow
-
-Create a session:
-
-```http
-POST /api/v1/photo-sessions
-```
-
-Upload the original:
-
-```http
-POST /api/v1/photo-sessions/{sessionId}/photo
-Content-Type: multipart/form-data
-
-photo=<required file>
 latitude=<optional number>
 longitude=<optional number>
-accuracy=<optional number>
+accuracy=<optional non-negative number>
 ```
 
-Start asynchronous enhancement:
+`latitude` and `longitude` must be sent together. Do not manually set the
+multipart `Content-Type` header in frontend `fetch`; the browser adds its
+boundary automatically.
 
-```http
-POST /api/v1/photo-sessions/{sessionId}/enhance
+Success returns `201 Created`:
+
+```json
+{
+  "id": "mongodb-document-id",
+  "saved": true,
+  "contentType": "image/jpeg",
+  "sizeBytes": 123456,
+  "latitude": 28.6139,
+  "longitude": 77.209,
+  "accuracy": 18.4,
+  "locationSource": "gps",
+  "address": null,
+  "clientIp": "203.0.113.5",
+  "savedAt": "2026-07-29T10:00:00Z"
+}
 ```
 
-Poll status:
+The MongoDB collection is `captured_photos`. Its `photo` field contains the
+binary image. If GPS is denied or unavailable, the backend attempts Geo-IP and
+sets `locationSource` to `ip`. If providers are unavailable, the photo is still
+saved with `locationSource: "raw_ip"` and the visitor's raw public IP.
 
-```http
-GET /api/v1/photo-sessions/{sessionId}
-```
+The browser must show a clear disclosure before requesting camera/location
+permission and uploading. Camera and geolocation are secure-context APIs, so
+production must use HTTPS.
 
-The enhance request returns `202 Accepted` with `PROCESSING`. Poll every two
-seconds until the session becomes `COMPLETED` or `FAILED`.
+## Existing location APIs
+
+- `POST /api/location`
+- `POST /api/location/fallback`
 
 ## Required production environment
 
 - `MONGODB_URI`
 - `MONGODB_DATABASE`
 - `CORS_ALLOWED_ORIGIN_PATTERNS`
-- `GEMINI_API_KEY`
-- `GEMINI_IMAGE_MODEL` (defaults to `gemini-3.1-flash-image`)
+- `STORE_LOCATIONS=true`
+- `LOCATIONIQ_TOKEN` (optional; only needed for GPS reverse geocoding through
+  the existing `/api/location` endpoint)
 
-Cloudinary is not required by the direct endpoint. The legacy stored-session
-flow can optionally use `CLOUDINARY_CLOUD_NAME` with
-`CLOUDINARY_UPLOAD_PRESET`. Alternatively, omit the preset and provide
-`CLOUDINARY_API_KEY` plus `CLOUDINARY_API_SECRET` for signed uploads. When an
-upload preset is configured it takes precedence, so invalid legacy credentials
-do not block uploads. Without valid signed credentials, best-effort deletion of
-orphaned Cloudinary assets is unavailable.
-
-See [.env.example](.env.example) for optional limits and timeout settings.
-Never expose Cloudinary or Gemini credentials in frontend code.
-
-## Storage and AI behavior
-
-Original and enhanced images use separate Cloudinary public IDs under:
-
-```text
-photogenius/sessions/{sessionId}/original/{uniqueId}
-photogenius/sessions/{sessionId}/enhanced/{uniqueId}
-```
-
-Gemini image editing uses Google's backend-only Interactions API. The prompt is
-versioned as `PHOTO_ENHANCEMENT_V1` in `ImageEnhancementPrompt`.
-
-Official references:
-
-- https://ai.google.dev/gemini-api/docs/image-generation
-- https://cloudinary.com/documentation/java_image_and_video_upload
+See [.env.example](.env.example) for upload limit settings.

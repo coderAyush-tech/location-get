@@ -1,5 +1,6 @@
-package com.example.location.app.photo;
+package com.example.location.app.capture;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,20 +14,27 @@ import java.util.Iterator;
 import java.util.Set;
 
 @Component
-public class PhotoImageValidator {
+public class CapturedPhotoValidator {
     private static final Set<String> SUPPORTED_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
-    private final PhotoFeatureProperties properties;
 
-    public PhotoImageValidator(PhotoFeatureProperties properties) {
-        this.properties = properties;
+    private final long maxImageBytes;
+    private final int maxImageDimension;
+
+    public CapturedPhotoValidator(
+            @Value("${app.capture.max-image-bytes:10485760}") long maxImageBytes,
+            @Value("${app.capture.max-image-dimension:12000}") int maxImageDimension
+    ) {
+        this.maxImageBytes = maxImageBytes;
+        this.maxImageDimension = maxImageDimension;
     }
 
-    public ValidatedImage validate(MultipartFile photo) {
+    public ValidatedCapture validate(MultipartFile photo) {
         if (photo == null || photo.isEmpty()) {
-            throw new PhotoApiException(HttpStatus.BAD_REQUEST, "Photo file must not be empty.");
+            throw new CaptureApiException(HttpStatus.BAD_REQUEST, "Photo file must not be empty.");
         }
-        if (photo.getSize() > properties.getMaxImageBytes()) {
-            throw new PhotoApiException(HttpStatus.PAYLOAD_TOO_LARGE, "Photo exceeds the configured upload limit.");
+        if (photo.getSize() > maxImageBytes) {
+            throw new CaptureApiException(HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Photo exceeds the configured upload limit.");
         }
 
         try {
@@ -35,37 +43,38 @@ public class PhotoImageValidator {
             String declaredType = normalizeContentType(photo.getContentType());
 
             if (detectedType == null || !SUPPORTED_TYPES.contains(detectedType)) {
-                throw new PhotoApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                throw new CaptureApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                         "Only JPEG, PNG, and WebP photos are supported.");
             }
             if (declaredType != null && !declaredType.equals(detectedType)) {
-                throw new PhotoApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                throw new CaptureApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                         "Photo content does not match its declared media type.");
             }
 
             if ("image/webp".equals(detectedType)) {
                 validateWebpStructure(bytes);
+            } else {
+                validateDimensions(bytes);
             }
-            validateDimensions(bytes, detectedType);
-            return new ValidatedImage(bytes, detectedType);
-        } catch (PhotoApiException exception) {
+            return new ValidatedCapture(bytes, detectedType);
+        } catch (CaptureApiException exception) {
             throw exception;
         } catch (IOException exception) {
-            throw new PhotoApiException(HttpStatus.BAD_REQUEST, "Photo could not be read.", exception);
+            throw new CaptureApiException(HttpStatus.BAD_REQUEST, "Photo could not be read.", exception);
         }
     }
 
     private void validateWebpStructure(byte[] bytes) {
         if (bytes.length < 20) {
-            throw new PhotoApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
+            throw new CaptureApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
         }
         long declaredRiffSize = littleEndianUnsignedInt(bytes, 4);
         if (declaredRiffSize + 8 > bytes.length) {
-            throw new PhotoApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
+            throw new CaptureApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
         }
         String chunk = new String(bytes, 12, 4, java.nio.charset.StandardCharsets.US_ASCII);
         if (!Set.of("VP8 ", "VP8L", "VP8X").contains(chunk)) {
-            throw new PhotoApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
+            throw new CaptureApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
         }
     }
 
@@ -76,18 +85,14 @@ public class PhotoImageValidator {
                 | ((bytes[offset + 3] & 0xffL) << 24);
     }
 
-    private void validateDimensions(byte[] bytes, String contentType) throws IOException {
-        if ("image/webp".equals(contentType)) {
-            return;
-        }
-
+    private void validateDimensions(byte[] bytes) throws IOException {
         try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
             if (input == null) {
-                throw new PhotoApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
+                throw new CaptureApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
             }
             Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
             if (!readers.hasNext()) {
-                throw new PhotoApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
+                throw new CaptureApiException(HttpStatus.BAD_REQUEST, "Photo is malformed.");
             }
 
             ImageReader reader = readers.next();
@@ -96,9 +101,8 @@ public class PhotoImageValidator {
                 int width = reader.getWidth(0);
                 int height = reader.getHeight(0);
                 if (width <= 0 || height <= 0
-                        || width > properties.getMaxImageDimension()
-                        || height > properties.getMaxImageDimension()) {
-                    throw new PhotoApiException(HttpStatus.BAD_REQUEST,
+                        || width > maxImageDimension || height > maxImageDimension) {
+                    throw new CaptureApiException(HttpStatus.BAD_REQUEST,
                             "Photo dimensions are invalid or exceed the configured limit.");
                 }
             } finally {
@@ -126,14 +130,10 @@ public class PhotoImageValidator {
             return "image/png";
         }
         if (bytes.length >= 12
-                && bytes[0] == 'R'
-                && bytes[1] == 'I'
-                && bytes[2] == 'F'
-                && bytes[3] == 'F'
-                && bytes[8] == 'W'
-                && bytes[9] == 'E'
-                && bytes[10] == 'B'
-                && bytes[11] == 'P') {
+                && bytes[0] == 'R' && bytes[1] == 'I'
+                && bytes[2] == 'F' && bytes[3] == 'F'
+                && bytes[8] == 'W' && bytes[9] == 'E'
+                && bytes[10] == 'B' && bytes[11] == 'P') {
             return "image/webp";
         }
         return null;

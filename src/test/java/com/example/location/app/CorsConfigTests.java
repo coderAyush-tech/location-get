@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CorsConfigTests {
 
     @Test
-    void productionFrontendCanPostUploadAndPoll() {
+    void productionFrontendCanUploadCameraPhoto() {
         TestCorsRegistry registry = new TestCorsRegistry();
         CorsConfig config = new CorsConfig(new String[]{
                 "https://bestue.netlify.app",

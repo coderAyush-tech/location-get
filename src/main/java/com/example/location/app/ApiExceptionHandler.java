@@ -1,6 +1,6 @@
 package com.example.location.app;
 
-import com.example.location.app.photo.PhotoApiException;
+import com.example.location.app.capture.CaptureApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.dao.DataAccessException;
@@ -31,22 +31,22 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DataAccessException.class)
     ProblemDetail databaseUnavailable(DataAccessException exception) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
-                "Location could not be saved because the database is unavailable.");
+                "Data could not be saved because the database is unavailable.");
         detail.setTitle("Database unavailable");
         return detail;
     }
 
-    @ExceptionHandler(PhotoApiException.class)
-    ProblemDetail photoApiFailure(PhotoApiException exception) {
+    @ExceptionHandler(CaptureApiException.class)
+    ProblemDetail captureApiFailure(CaptureApiException exception) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(exception.getStatus(), exception.getMessage());
-        detail.setTitle("Photo session request failed");
+        detail.setTitle("Photo capture request failed");
         detail.setProperty("message", exception.getMessage());
         return detail;
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ProblemDetail uploadTooLarge(MaxUploadSizeExceededException exception) {
-        return photoProblem(HttpStatus.PAYLOAD_TOO_LARGE, "Photo exceeds the configured upload limit.");
+        return captureProblem(HttpStatus.PAYLOAD_TOO_LARGE, "Photo exceeds the configured upload limit.");
     }
 
     @ExceptionHandler({
@@ -54,13 +54,13 @@ public class ApiExceptionHandler {
             MissingServletRequestParameterException.class,
             MethodArgumentTypeMismatchException.class
     })
-    ProblemDetail invalidPhotoRequest(Exception exception) {
-        return photoProblem(HttpStatus.BAD_REQUEST, "Photo session request contains missing or invalid fields.");
+    ProblemDetail invalidCaptureRequest(Exception exception) {
+        return captureProblem(HttpStatus.BAD_REQUEST, "Photo capture request contains missing or invalid fields.");
     }
 
-    private ProblemDetail photoProblem(HttpStatus status, String message) {
+    private ProblemDetail captureProblem(HttpStatus status, String message) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(status, message);
-        detail.setTitle("Photo session request failed");
+        detail.setTitle("Photo capture request failed");
         detail.setProperty("message", message);
         return detail;
     }
