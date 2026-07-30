@@ -1,0 +1,39 @@
+name: Keep Render and MongoDB awake
+
+on:
+  schedule:
+    # Offset from the top of the hour to reduce scheduled-run delays.
+    - cron: "3,13,23,33,43,53 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping backend and MongoDB
+        env:
+          KEEP_ALIVE_TOKEN: ${{ secrets.KEEP_ALIVE_TOKEN }}
+          KEEP_ALIVE_URL: https://locationfinder-pdzb.onrender.com/api/health/keep-alive
+        run: |
+          if [ -z "$KEEP_ALIVE_TOKEN" ]; then
+            echo "::error::Add KEEP_ALIVE_TOKEN in GitHub Actions secrets."
+            exit 1
+          fi
+
+          curl \
+            --fail-with-body \
+            --show-error \
+            --silent \
+            --max-time 180 \
+            --retry 2 \
+            --retry-delay 10 \
+            --header "X-Keep-Alive-Token: $KEEP_ALIVE_TOKEN" \
+            "$KEEP_ALIVE_URL"

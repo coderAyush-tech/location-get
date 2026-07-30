@@ -55,12 +55,45 @@ production must use HTTPS.
 - `POST /api/location`
 - `POST /api/location/fallback`
 
+## Render and MongoDB keep-alive
+
+The protected endpoint below performs a MongoDB `{ ping: 1 }` command. It does
+not create dummy photos, locations, or database documents.
+
+```http
+GET /api/health/keep-alive
+X-Keep-Alive-Token: <KEEP_ALIVE_TOKEN>
+```
+
+Success returns:
+
+```json
+{
+  "backend": "up",
+  "mongodb": "up",
+  "checkedAt": "2026-07-30T10:00:00Z"
+}
+```
+
+The repository includes
+[`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml), which
+calls this endpoint every ten minutes. Configure the same randomly generated
+value in both locations:
+
+1. Render environment variable: `KEEP_ALIVE_TOKEN`
+2. GitHub repository `Settings > Secrets and variables > Actions > Secrets`:
+   `KEEP_ALIVE_TOKEN`
+
+Never put this token in frontend or Netlify environment variables. The workflow
+can also be run manually from the GitHub Actions page to verify the setup.
+
 ## Required production environment
 
 - `MONGODB_URI`
 - `MONGODB_DATABASE`
 - `CORS_ALLOWED_ORIGIN_PATTERNS`
 - `STORE_LOCATIONS=true`
+- `KEEP_ALIVE_TOKEN`
 - `LOCATIONIQ_TOKEN` (optional; only needed for GPS reverse geocoding through
   the existing `/api/location` endpoint)
 

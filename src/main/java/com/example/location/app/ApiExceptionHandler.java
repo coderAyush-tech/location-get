@@ -1,6 +1,7 @@
 package com.example.location.app;
 
 import com.example.location.app.capture.CaptureApiException;
+import com.example.location.app.health.KeepAliveException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.dao.DataAccessException;
@@ -14,6 +15,13 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(KeepAliveException.class)
+    ProblemDetail keepAliveFailure(KeepAliveException exception) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(exception.getStatus(), exception.getMessage());
+        detail.setTitle("Keep-alive check failed");
+        return detail;
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ProblemDetail invalidRequest(MethodArgumentNotValidException exception) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Latitude must be between -90 and 90, and longitude between -180 and 180.");
