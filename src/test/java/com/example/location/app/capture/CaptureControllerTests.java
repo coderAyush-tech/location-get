@@ -1,6 +1,7 @@
 package com.example.location.app.capture;
 
 import com.example.location.app.ApiExceptionHandler;
+import com.example.location.app.ClientIpResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,8 +30,11 @@ class CaptureControllerTests {
 
     @BeforeEach
     void setUp() {
+        ClientIpResolver clientIpResolver = new ClientIpResolver(new String[]{
+                "127.0.0.0/8", "10.0.0.0/8"
+        });
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new CaptureController(captureService))
+                .standaloneSetup(new CaptureController(captureService, clientIpResolver))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .build();
     }

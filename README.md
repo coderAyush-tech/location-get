@@ -55,6 +55,39 @@ production must use HTTPS.
 - `POST /api/location`
 - `POST /api/location/fallback`
 
+## Read-only admin API
+
+The admin terminal uses a BCrypt-protected login and a signed 15-minute Bearer
+token. Admin credentials and signing secrets exist only in the backend
+environment.
+
+```http
+POST /api/v1/admin/auth/login
+Content-Type: application/json
+
+{"username":"...","password":"..."}
+```
+
+Use the returned token for both protected endpoints:
+
+```http
+GET /api/v1/admin/captures?page=0&size=20&sort=createdAt,desc&query=&locationSource=ALL
+Authorization: Bearer <accessToken>
+
+GET /api/v1/admin/captures/{captureId}/photo
+Authorization: Bearer <accessToken>
+```
+
+`locationSource` accepts `ALL`, `GPS`, `GEO_IP`, and `RAW_IP`. The list is
+always newest-first and uses MongoDB pagination. Photo bytes are returned only
+through the protected endpoint with `Cache-Control: no-store, private`; no
+public image URL is created.
+
+The existing capture documents do not store image dimensions or user-agent
+values, so those optional admin fields are returned as `null`. For Geo-IP
+captures, city/region/country are derived from the existing combined `address`
+value without changing the public capture workflow or stored document schema.
+
 ## Render and MongoDB keep-alive
 
 The protected endpoint below performs a MongoDB `{ ping: 1 }` command. It does
@@ -96,5 +129,20 @@ can also be run manually from the GitHub Actions page to verify the setup.
 - `KEEP_ALIVE_TOKEN`
 - `LOCATIONIQ_TOKEN` (optional; only needed for GPS reverse geocoding through
   the existing `/api/location` endpoint)
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD_HASH` (BCrypt hash only, never a plain password)
+- `ADMIN_JWT_SECRET` (at least 32 random bytes)
+- `ADMIN_TOKEN_TTL_SECONDS=900`
+
+Optional admin hardening values:
+
+- `ADMIN_LOGIN_MAX_FAILURES=5`
+- `ADMIN_LOGIN_WINDOW_SECONDS=900`
+- `TRUSTED_PROXY_CIDRS` (defaults to loopback/private/link-local/CGNAT proxy
+  networks suitable for the Render proxy path)
+
+Set `CORS_ALLOWED_ORIGIN_PATTERNS` to the exact comma-separated values
+`https://bestue.netlify.app,http://localhost:5173`. Do not place any admin
+credential, password hash, or JWT secret in Netlify/frontend variables.
 
 See [.env.example](.env.example) for upload limit settings.

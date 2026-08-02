@@ -14,10 +14,16 @@ public class LocationController {
 
     private final LocationService locationService;
     private final GeoIpService geoIpService;
+    private final ClientIpResolver clientIpResolver;
 
-    public LocationController(LocationService locationService, GeoIpService geoIpService) {
+    public LocationController(
+            LocationService locationService,
+            GeoIpService geoIpService,
+            ClientIpResolver clientIpResolver
+    ) {
         this.locationService = locationService;
         this.geoIpService = geoIpService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @PostMapping("/location")
@@ -26,7 +32,7 @@ public class LocationController {
             HttpServletRequest request
     ) {
         return ResponseEntity.ok(
-                locationService.reverseGeocode(location, ClientIpResolver.resolve(request))
+                locationService.reverseGeocode(location, clientIpResolver.resolve(request))
         );
     }
 
@@ -37,7 +43,7 @@ public class LocationController {
     @PostMapping("/location/fallback")
     public ResponseEntity<LocationResponse> locationFallback(HttpServletRequest request) {
         return ResponseEntity.ok(
-                geoIpService.locate(ClientIpResolver.resolve(request))
+                geoIpService.locate(clientIpResolver.resolve(request))
         );
     }
 }

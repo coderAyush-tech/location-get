@@ -1,9 +1,12 @@
 package com.example.location.app;
 
+import com.example.location.app.admin.AdminApiException;
 import com.example.location.app.capture.CaptureApiException;
 import com.example.location.app.health.KeepAliveException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.dao.DataAccessException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -15,6 +18,19 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(AdminApiException.class)
+    ResponseEntity<ProblemDetail> adminApiFailure(AdminApiException exception) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(exception.getStatus(), exception.getMessage());
+        detail.setTitle(exception.getTitle());
+        detail.setProperty("message", exception.getMessage());
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(exception.getStatus())
+                .contentType(org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON);
+        if (exception.getRetryAfterSeconds() != null) {
+            response.header(HttpHeaders.RETRY_AFTER, exception.getRetryAfterSeconds().toString());
+        }
+        return response.body(detail);
+    }
+
     @ExceptionHandler(KeepAliveException.class)
     ProblemDetail keepAliveFailure(KeepAliveException exception) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(exception.getStatus(), exception.getMessage());

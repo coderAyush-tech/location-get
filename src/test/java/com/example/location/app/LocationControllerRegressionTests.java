@@ -26,8 +26,9 @@ class LocationControllerRegressionTests {
 
     @BeforeEach
     void setUp() {
+        ClientIpResolver clientIpResolver = new ClientIpResolver(new String[]{"127.0.0.0/8"});
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new LocationController(locationService, geoIpService))
+                .standaloneSetup(new LocationController(locationService, geoIpService, clientIpResolver))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .build();
     }

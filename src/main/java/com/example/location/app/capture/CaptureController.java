@@ -15,9 +15,11 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/v1/captures")
 public class CaptureController {
     private final CaptureService captureService;
+    private final ClientIpResolver clientIpResolver;
 
-    public CaptureController(CaptureService captureService) {
+    public CaptureController(CaptureService captureService, ClientIpResolver clientIpResolver) {
         this.captureService = captureService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -33,7 +35,7 @@ public class CaptureController {
                 latitude,
                 longitude,
                 accuracy,
-                ClientIpResolver.resolve(request)
+                clientIpResolver.resolve(request)
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
