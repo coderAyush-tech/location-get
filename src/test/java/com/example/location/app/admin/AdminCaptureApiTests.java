@@ -1,8 +1,10 @@
 package com.example.location.app.admin;
 
 import com.example.location.app.ApiExceptionHandler;
+import com.example.location.app.ClientIpResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import tools.jackson.databind.ObjectMapper;
@@ -13,6 +15,11 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -24,6 +31,7 @@ class AdminCaptureApiTests {
 
     private FakeAdminCaptureStore store;
     private AdminTokenService tokenService;
+    private AdminCaptureDeleteService deleteService;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -32,9 +40,14 @@ class AdminCaptureApiTests {
         AdminCaptureService captureService = new AdminCaptureService(store);
         AdminProperties properties = AdminAuthControllerTests.properties(5);
         tokenService = new AdminTokenService(properties, new ObjectMapper());
+        deleteService = mock(AdminCaptureDeleteService.class);
         AdminAuthorizationInterceptor interceptor = new AdminAuthorizationInterceptor(tokenService);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AdminCaptureController(captureService))
+                .standaloneSetup(new AdminCaptureController(
+                        captureService,
+                        deleteService,
+                        new ClientIpResolver(new String[]{"127.0.0.0/8", "10.0.0.0/8"})
+                ))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .addInterceptors(interceptor)
                 .addFilters(new AdminSecurityHeadersFilter())
@@ -117,6 +130,51 @@ class AdminCaptureApiTests {
                 .andExpect(jsonPath("$.title").value("Photo not found"));
     }
 
+    @Test
+    void deleteRequiresBearerTokenAndDoesNotInvokeStorage() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/captures/newest-capture"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType("application/problem+json"));
+
+        verifyNoInteractions(deleteService);
+    }
+
+    @Test
+    void signedNonAdminTokenCannotDelete() throws Exception {
+        String token = tokenService.issue("viewer", "USER", Duration.ofMinutes(15)).value();
+
+        mockMvc.perform(delete("/api/v1/admin/captures/newest-capture")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("Access denied"));
+
+        verifyNoInteractions(deleteService);
+    }
+
+    @Test
+    void authorizedAdminCanDeleteExactlyOneCapture() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/captures/newest-capture")
+                        .header("Authorization", bearerAdmin()))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(deleteService).delete("newest-capture", "admin", "127.0.0.1");
+    }
+
+    @Test
+    void unknownDeleteReturnsNotFoundProblemWithoutDeletedBody() throws Exception {
+        doThrow(new AdminApiException(HttpStatus.NOT_FOUND, "Capture not found", "Capture was not found."))
+                .when(deleteService).delete("missing", "admin", "127.0.0.1");
+
+        mockMvc.perform(delete("/api/v1/admin/captures/missing")
+                        .header("Authorization", bearerAdmin()))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType("application/problem+json"))
+                .andExpect(jsonPath("$.title").value("Capture not found"))
+                .andExpect(jsonPath("$.photo").doesNotExist())
+                .andExpect(jsonPath("$.accessToken").doesNotExist());
+    }
+
     private String bearerAdmin() {
         return "Bearer " + tokenService.issueAdminToken("admin").value();
     }
@@ -154,6 +212,11 @@ class AdminCaptureApiTests {
                 return Optional.empty();
             }
             return Optional.of(new AdminStoredPhoto(PHOTO_BYTES, "image/jpeg", "camera.jpg"));
+        }
+
+        @Override
+        public DeleteOutcome deleteExact(String captureId) {
+            return DeleteOutcome.NOT_FOUND;
         }
     }
 }

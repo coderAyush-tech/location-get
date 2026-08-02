@@ -1,15 +1,19 @@
 package com.example.location.app.admin;
 
+import com.mongodb.client.result.DeleteResult;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.Id;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.MongoDatabaseFactory;
+import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -26,15 +30,29 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
 
     private final MongoTemplate mongoTemplate;
     private final Clock clock;
+    private final TransactionTemplate deleteTransaction;
 
     @Autowired
+    MongoAdminCaptureStore(MongoTemplate mongoTemplate, MongoDatabaseFactory databaseFactory) {
+        this(mongoTemplate, Clock.systemUTC(), new TransactionTemplate(new MongoTransactionManager(databaseFactory)));
+    }
+
     MongoAdminCaptureStore(MongoTemplate mongoTemplate) {
-        this(mongoTemplate, Clock.systemUTC());
+        this(mongoTemplate, Clock.systemUTC(), null);
     }
 
     MongoAdminCaptureStore(MongoTemplate mongoTemplate, Clock clock) {
+        this(mongoTemplate, clock, null);
+    }
+
+    private MongoAdminCaptureStore(
+            MongoTemplate mongoTemplate,
+            Clock clock,
+            TransactionTemplate deleteTransaction
+    ) {
         this.mongoTemplate = mongoTemplate;
         this.clock = clock;
+        this.deleteTransaction = deleteTransaction;
     }
 
     @Override
@@ -92,6 +110,27 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
             return Optional.empty();
         }
         return Optional.of(new AdminStoredPhoto(document.photo, document.contentType, document.originalFilename));
+    }
+
+    @Override
+    public DeleteOutcome deleteExact(String captureId) {
+        if (deleteTransaction == null) {
+            return removeExact(captureId);
+        }
+        DeleteOutcome outcome = deleteTransaction.execute(status -> removeExact(captureId));
+        if (outcome == null) {
+            throw new AdminCaptureDeleteConflictException("MongoDB transaction returned no deletion outcome.");
+        }
+        return outcome;
+    }
+
+    private DeleteOutcome removeExact(String captureId) {
+        Query query = Query.query(Criteria.where("_id").is(idValue(captureId)));
+        DeleteResult result = mongoTemplate.remove(query, COLLECTION);
+        if (!result.wasAcknowledged() || result.getDeletedCount() > 1) {
+            throw new AdminCaptureDeleteConflictException("MongoDB did not confirm one safe capture deletion.");
+        }
+        return result.getDeletedCount() == 1 ? DeleteOutcome.DELETED : DeleteOutcome.NOT_FOUND;
     }
 
     private Criteria filters(AdminCaptureQuery request) {

@@ -29,6 +29,7 @@ class CorsConfigTests {
         assertTrue(cors.getAllowedOriginPatterns().contains("http://localhost:5173"));
         assertTrue(cors.getAllowedMethods().contains("POST"));
         assertTrue(cors.getAllowedMethods().contains("GET"));
+        assertTrue(cors.getAllowedMethods().contains("DELETE"));
         assertTrue(cors.getAllowedMethods().contains("OPTIONS"));
         assertTrue(cors.getAllowedHeaders().contains("Authorization"));
         assertTrue(cors.getAllowedHeaders().contains("Content-Type"));
@@ -45,7 +46,7 @@ class CorsConfigTests {
         CorsConfiguration cors = registry.configurations().get("/api/**");
         MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/v1/admin/captures");
         request.addHeader(HttpHeaders.ORIGIN, "https://bestue.netlify.app");
-        request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+        request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE");
         request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Authorization");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -56,6 +57,8 @@ class CorsConfigTests {
                 .contains("https://bestue.netlify.app"));
         assertTrue(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS)
                 .toLowerCase().contains("authorization"));
+        assertTrue(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS)
+                .contains("DELETE"));
     }
 
     static class TestCorsRegistry extends CorsRegistry {

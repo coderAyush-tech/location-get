@@ -10,6 +10,13 @@ interface AdminCaptureStore {
 
     Optional<AdminStoredPhoto> findPhoto(String captureId);
 
+    DeleteOutcome deleteExact(String captureId);
+
     record CaptureSlice(List<AdminCaptureMetadata> content, long totalElements) {
+    }
+
+    enum DeleteOutcome {
+        DELETED,
+        NOT_FOUND
     }
 }

@@ -1,11 +1,14 @@
 package com.example.location.app.admin;
 
+import com.example.location.app.ClientIpResolver;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,9 +22,17 @@ import java.nio.charset.StandardCharsets;
 @RequestMapping("/api/v1/admin/captures")
 public class AdminCaptureController {
     private final AdminCaptureService captureService;
+    private final AdminCaptureDeleteService deleteService;
+    private final ClientIpResolver clientIpResolver;
 
-    public AdminCaptureController(AdminCaptureService captureService) {
+    public AdminCaptureController(
+            AdminCaptureService captureService,
+            AdminCaptureDeleteService deleteService,
+            ClientIpResolver clientIpResolver
+    ) {
         this.captureService = captureService;
+        this.deleteService = deleteService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @GetMapping
@@ -50,6 +61,20 @@ public class AdminCaptureController {
                 .contentLength(photo.bytes().length)
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .body(resource);
+    }
+
+    @DeleteMapping("/{captureId}")
+    ResponseEntity<Void> delete(@PathVariable String captureId, HttpServletRequest request) {
+        Object username = request.getAttribute(AdminAuthorizationInterceptor.ADMIN_USERNAME_ATTRIBUTE);
+        if (!(username instanceof String adminUsername) || adminUsername.isBlank()) {
+            throw new AdminApiException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Access denied",
+                    "Administrator access is required."
+            );
+        }
+        deleteService.delete(captureId, adminUsername, clientIpResolver.resolve(request));
+        return ResponseEntity.noContent().build();
     }
 
     private MediaType safeMediaType(String contentType) {

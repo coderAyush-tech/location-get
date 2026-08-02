@@ -2,6 +2,7 @@ package com.example.location.app.admin;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import tools.jackson.databind.ObjectMapper;
 
@@ -15,6 +16,7 @@ class AdminBeanWiringTests {
             context.registerBean(AdminProperties.class, () -> AdminAuthControllerTests.properties(5));
             context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
             context.registerBean(MongoTemplate.class, () -> mock(MongoTemplate.class));
+            context.registerBean(MongoDatabaseFactory.class, () -> mock(MongoDatabaseFactory.class));
             context.register(AdminTokenService.class, AdminLoginRateLimiter.class, MongoAdminCaptureStore.class);
             context.refresh();
 

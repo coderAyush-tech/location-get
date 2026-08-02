@@ -55,7 +55,7 @@ production must use HTTPS.
 - `POST /api/location`
 - `POST /api/location/fallback`
 
-## Read-only admin API
+## Admin API
 
 The admin terminal uses a BCrypt-protected login and a signed 15-minute Bearer
 token. Admin credentials and signing secrets exist only in the backend
@@ -68,7 +68,7 @@ Content-Type: application/json
 {"username":"...","password":"..."}
 ```
 
-Use the returned token for both protected endpoints:
+Use the returned token for all protected endpoints:
 
 ```http
 GET /api/v1/admin/captures?page=0&size=20&sort=createdAt,desc&query=&locationSource=ALL
@@ -76,12 +76,22 @@ Authorization: Bearer <accessToken>
 
 GET /api/v1/admin/captures/{captureId}/photo
 Authorization: Bearer <accessToken>
+
+DELETE /api/v1/admin/captures/{captureId}
+Authorization: Bearer <accessToken>
 ```
 
 `locationSource` accepts `ALL`, `GPS`, `GEO_IP`, and `RAW_IP`. The list is
 always newest-first and uses MongoDB pagination. Photo bytes are returned only
 through the protected endpoint with `Cache-Control: no-store, private`; no
 public image URL is created.
+
+The delete endpoint permanently removes exactly one capture document, including
+its embedded photo bytes, and returns `204 No Content`. It returns `404` when the
+ID does not exist and `409` when MongoDB cannot safely confirm the deletion.
+Every attempt is audit-logged with the admin identity, capture ID, UTC timestamp,
+trusted client IP, and result. Tokens and photo data are never audit-logged.
+There are no edit, bulk-delete, or export endpoints.
 
 The existing capture documents do not store image dimensions or user-agent
 values, so those optional admin fields are returned as `null`. For Geo-IP
