@@ -27,7 +27,7 @@ public class GeoIpService {
         this.addressRepository = addressRepository;
         this.storeLocations = storeLocations;
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        // The frontend gives up after 15 seconds. Keep all provider attempts within that budget.
+        // Keep optional provider enrichment bounded so photo uploads are not held indefinitely.
         requestFactory.setConnectTimeout(2_000);
         requestFactory.setReadTimeout(2_500);
         this.restTemplate = new RestTemplate(requestFactory);
@@ -44,18 +44,47 @@ public class GeoIpService {
                 valueOrUnknown(geoIp.country()));
         LocationResponse result = new LocationResponse(geoIp.latitude(), geoIp.longitude(), address, "ip",
                 "Estimated from public IP; accuracy is normally city or region level, not an exact address", clientIp);
+        return save(result);
+    }
+
+    /**
+     * Geo-IP is optional enrichment. Provider outages must not turn a location-denied
+     * request into a 502; retain the trusted raw client IP instead.
+     */
+    public LocationResponse locateOrRawIp(String clientIp) {
+        try {
+            return locate(clientIp);
+        } catch (LocationLookupException exception) {
+            log.warn("GEO_IP_RAW_FALLBACK clientIp={} reason={}", clientIp, exception.getMessage());
+            return save(new LocationResponse(
+                    null,
+                    null,
+                    "Address unavailable",
+                    "raw_ip",
+                    "IP geolocation is unavailable; the trusted raw client IP was retained",
+                    clientIp
+            ));
+        }
+    }
+
+    private LocationResponse save(LocationResponse result) {
         if (storeLocations) {
             try {
-            SavedAddress saved = addressRepository.save(new SavedAddress(result.address(), result.latitude(), result.longitude(),
-                    result.source(), clientIp));
-            log.info("MONGO_SAVE_SUCCESS source={} clientIp={} latitude={} longitude={} address={} id={}",
-                    result.source(), clientIp, result.latitude(), result.longitude(), result.address(), saved.getId());
+                SavedAddress saved = addressRepository.save(new SavedAddress(
+                        result.address(),
+                        result.latitude(),
+                        result.longitude(),
+                        result.source(),
+                        result.clientIp()
+                ));
+                log.info("MONGO_SAVE_SUCCESS source={} clientIp={} latitude={} longitude={} address={} id={}",
+                        result.source(), result.clientIp(), result.latitude(), result.longitude(), result.address(), saved.getId());
             } catch (org.springframework.dao.DataAccessException exception) {
                 // Return the IP result even when MongoDB is temporarily unreachable.
-                log.error("MONGO_SAVE_FAILED source={} clientIp={} type={} message={}", result.source(), clientIp,
+                log.error("MONGO_SAVE_FAILED source={} clientIp={} type={} message={}", result.source(), result.clientIp(),
                         exception.getClass().getSimpleName(), exception.getMessage());
                 return new LocationResponse(result.latitude(), result.longitude(), result.address(), result.source(),
-                        result.accuracyNote() + " Database storage is temporarily unavailable.", clientIp);
+                        result.accuracyNote() + " Database storage is temporarily unavailable.", result.clientIp());
             }
         }
         return result;

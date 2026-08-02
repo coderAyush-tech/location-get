@@ -55,6 +55,11 @@ production must use HTTPS.
 - `POST /api/location`
 - `POST /api/location/fallback`
 
+`POST /api/location/fallback` returns Geo-IP coordinates when a provider is
+available. If every provider is unavailable, it returns `200 OK` with
+`source: "raw_ip"`, nullable coordinates, and the trusted client IP instead of
+failing the permission-denied flow with `502`.
+
 ## Admin API
 
 The admin terminal uses a BCrypt-protected login and a signed 15-minute Bearer

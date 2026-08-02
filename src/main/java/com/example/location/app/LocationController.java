@@ -43,7 +43,7 @@ public class LocationController {
     @PostMapping("/location/fallback")
     public ResponseEntity<LocationResponse> locationFallback(HttpServletRequest request) {
         return ResponseEntity.ok(
-                geoIpService.locate(clientIpResolver.resolve(request))
+                geoIpService.locateOrRawIp(clientIpResolver.resolve(request))
         );
     }
 }

@@ -1,7 +1,6 @@
 package com.example.location.app.capture;
 
 import com.example.location.app.GeoIpService;
-import com.example.location.app.LocationLookupException;
 import com.example.location.app.LocationResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,7 +55,7 @@ class CaptureServiceTests {
         assertEquals("gps", response.locationSource());
         assertEquals(28.6139, response.latitude());
         assertEquals(14.5, response.accuracy());
-        verify(geoIpService, never()).locate(any());
+        verify(geoIpService, never()).locateOrRawIp(any());
 
         ArgumentCaptor<CapturedPhoto> captor = ArgumentCaptor.forClass(CapturedPhoto.class);
         verify(repository).save(captor.capture());
@@ -66,7 +65,7 @@ class CaptureServiceTests {
 
     @Test
     void usesGeoIpWhenBrowserLocationIsMissing() {
-        when(geoIpService.locate("106.222.248.114")).thenReturn(new LocationResponse(
+        when(geoIpService.locateOrRawIp("106.222.248.114")).thenReturn(new LocationResponse(
                 28.6, 77.2, "Delhi, India", "ip", "Approximate", "106.222.248.114"
         ));
 
@@ -79,8 +78,14 @@ class CaptureServiceTests {
 
     @Test
     void stillSavesPhotoAndRawIpWhenGeoIpIsUnavailable() {
-        when(geoIpService.locate("106.222.248.114"))
-                .thenThrow(new LocationLookupException("Provider unavailable"));
+        when(geoIpService.locateOrRawIp("106.222.248.114")).thenReturn(new LocationResponse(
+                null,
+                null,
+                "Address unavailable",
+                "raw_ip",
+                "IP geolocation is unavailable; the trusted raw client IP was retained",
+                "106.222.248.114"
+        ));
 
         CaptureResponse response = service.save(photo, null, null, null, "106.222.248.114");
 

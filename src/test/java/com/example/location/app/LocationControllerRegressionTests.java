@@ -61,7 +61,7 @@ class LocationControllerRegressionTests {
 
     @Test
     void existingFallbackRouteAndResponseRemainUnchanged() throws Exception {
-        when(geoIpService.locate("203.0.113.5")).thenReturn(new LocationResponse(
+        when(geoIpService.locateOrRawIp("203.0.113.5")).thenReturn(new LocationResponse(
                 28.6,
                 77.2,
                 "New Delhi, Delhi, India",
@@ -76,6 +76,26 @@ class LocationControllerRegressionTests {
                 .andExpect(jsonPath("$.source").value("ip"))
                 .andExpect(jsonPath("$.clientIp").value("203.0.113.5"));
 
-        verify(geoIpService).locate("203.0.113.5");
+        verify(geoIpService).locateOrRawIp("203.0.113.5");
+    }
+
+    @Test
+    void providerFailureReturnsRawIpWithoutFakeCoordinatesOr502() throws Exception {
+        when(geoIpService.locateOrRawIp("203.0.113.5")).thenReturn(new LocationResponse(
+                null,
+                null,
+                "Address unavailable",
+                "raw_ip",
+                "IP geolocation is unavailable; the trusted raw client IP was retained",
+                "203.0.113.5"
+        ));
+
+        mockMvc.perform(post("/api/location/fallback")
+                        .header("X-Forwarded-For", "203.0.113.5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.source").value("raw_ip"))
+                .andExpect(jsonPath("$.clientIp").value("203.0.113.5"))
+                .andExpect(jsonPath("$.latitude").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.longitude").value(org.hamcrest.Matchers.nullValue()));
     }
 }

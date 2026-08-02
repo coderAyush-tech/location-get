@@ -1,7 +1,6 @@
 package com.example.location.app.capture;
 
 import com.example.location.app.GeoIpService;
-import com.example.location.app.LocationLookupException;
 import com.example.location.app.LocationResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,19 +87,14 @@ public class CaptureService {
                     "Accuracy cannot be sent without latitude and longitude.");
         }
 
-        try {
-            LocationResponse geoIp = geoIpService.locate(clientIp);
-            return new CaptureLocation(
-                    geoIp.latitude(),
-                    geoIp.longitude(),
-                    null,
-                    "ip",
-                    geoIp.address()
-            );
-        } catch (LocationLookupException exception) {
-            log.warn("CAPTURE_GEO_IP_UNAVAILABLE clientIp={} message={}", clientIp, exception.getMessage());
-            return new CaptureLocation(null, null, null, "raw_ip", null);
-        }
+        LocationResponse fallback = geoIpService.locateOrRawIp(clientIp);
+        return new CaptureLocation(
+                fallback.latitude(),
+                fallback.longitude(),
+                null,
+                fallback.source(),
+                "raw_ip".equals(fallback.source()) ? null : fallback.address()
+        );
     }
 
     private String safeFilename(String originalFilename) {
