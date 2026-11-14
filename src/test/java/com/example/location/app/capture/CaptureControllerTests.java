@@ -45,7 +45,8 @@ class CaptureControllerTests {
                 "photo", "camera.png", "image/png", ONE_PIXEL_PNG
         );
         when(captureService.save(
-                eq(photo), eq(28.6139), eq(77.209), eq(12.0), eq("106.222.248.114")
+                eq(photo), org.mockito.ArgumentMatchers.isNull(), eq(28.6139), eq(77.209),
+                eq(12.0), eq("106.222.248.114")
         )).thenReturn(new CaptureResponse(
                 "capture-1",
                 true,
@@ -57,7 +58,8 @@ class CaptureControllerTests {
                 "gps",
                 null,
                 "106.222.248.114",
-                Instant.parse("2026-07-29T10:00:00Z")
+                Instant.parse("2026-07-29T10:00:00Z"),
+                false
         ));
 
         mockMvc.perform(multipart("/api/v1/captures")

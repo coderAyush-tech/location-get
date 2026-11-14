@@ -11,6 +11,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CorsConfigTests {
 
@@ -34,6 +35,7 @@ class CorsConfigTests {
         assertTrue(cors.getAllowedHeaders().contains("Authorization"));
         assertTrue(cors.getAllowedHeaders().contains("Content-Type"));
         assertTrue(cors.getAllowedHeaders().contains("Accept"));
+        assertTrue(cors.getAllowedHeaders().contains("X-Audio-Publish-Token"));
     }
 
     @Test
@@ -59,6 +61,27 @@ class CorsConfigTests {
                 .toLowerCase().contains("authorization"));
         assertTrue(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS)
                 .contains("DELETE"));
+    }
+
+    @Test
+    void sessionClosePreflightAllowsPublisherTokenHeader() throws Exception {
+        TestCorsRegistry registry = new TestCorsRegistry();
+        new CorsConfig(new String[]{"https://bestue.netlify.app"}).addCorsMappings(registry);
+        CorsConfiguration cors = registry.configurations().get("/api/**");
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "OPTIONS", "/api/v1/live-audio/sessions/session-123");
+        request.addHeader(HttpHeaders.ORIGIN, "https://bestue.netlify.app");
+        request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE");
+        request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "x-audio-publish-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        boolean allowed = new DefaultCorsProcessor().processRequest(cors, request, response);
+
+        assertTrue(allowed);
+        assertEquals(200, response.getStatus());
+        assertTrue(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS).contains("DELETE"));
+        assertTrue(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS)
+                .toLowerCase().contains("x-audio-publish-token"));
     }
 
     static class TestCorsRegistry extends CorsRegistry {

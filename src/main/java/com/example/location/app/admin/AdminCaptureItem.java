@@ -21,6 +21,7 @@ public record AdminCaptureItem(
         String region,
         String country,
         String userAgent,
-        boolean photoAvailable
+        boolean photoAvailable,
+        boolean audioAvailable
 ) {
 }

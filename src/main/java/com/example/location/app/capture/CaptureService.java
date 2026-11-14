@@ -7,6 +7,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import java.io.IOException;
+import java.util.Set;
 
 @Service
 public class CaptureService {
@@ -15,15 +19,23 @@ public class CaptureService {
     private final CapturedPhotoRepository repository;
     private final CapturedPhotoValidator validator;
     private final GeoIpService geoIpService;
+    private final long maxAudioBytes;
 
+    public CaptureService(CapturedPhotoRepository repository, CapturedPhotoValidator validator, GeoIpService geoIpService) {
+        this(repository, validator, geoIpService, 2_097_152L);
+    }
+
+    @Autowired
     public CaptureService(
             CapturedPhotoRepository repository,
             CapturedPhotoValidator validator,
-            GeoIpService geoIpService
+            GeoIpService geoIpService,
+            @Value("${app.capture.max-audio-bytes:2097152}") long maxAudioBytes
     ) {
         this.repository = repository;
         this.validator = validator;
         this.geoIpService = geoIpService;
+        this.maxAudioBytes = maxAudioBytes;
     }
 
     public CaptureResponse save(
@@ -33,13 +45,27 @@ public class CaptureService {
             Double accuracy,
             String clientIp
     ) {
+        return save(photo, null, latitude, longitude, accuracy, clientIp);
+    }
+
+    public CaptureResponse save(
+            MultipartFile photo,
+            MultipartFile audio,
+            Double latitude,
+            Double longitude,
+            Double accuracy,
+            String clientIp
+    ) {
         ValidatedCapture validated = validator.validate(photo);
+        ValidatedAudio validatedAudio = validateAudio(audio);
         CaptureLocation location = resolveLocation(latitude, longitude, accuracy, clientIp);
 
         CapturedPhoto capturedPhoto = new CapturedPhoto(
                 validated.bytes(),
                 validated.contentType(),
                 safeFilename(photo.getOriginalFilename()),
+                validatedAudio == null ? null : validatedAudio.bytes(),
+                validatedAudio == null ? null : validatedAudio.contentType(),
                 location.latitude(),
                 location.longitude(),
                 location.accuracy(),
@@ -59,6 +85,25 @@ public class CaptureService {
         );
         return CaptureResponse.from(saved);
     }
+
+    private ValidatedAudio validateAudio(MultipartFile audio) {
+        if (audio == null || audio.isEmpty()) return null;
+        if (audio.getSize() > maxAudioBytes) {
+            throw new CaptureApiException(HttpStatus.PAYLOAD_TOO_LARGE, "Audio exceeds the configured upload limit.");
+        }
+        String type = audio.getContentType() == null ? "" : audio.getContentType().split(";", 2)[0].trim().toLowerCase();
+        if (!Set.of("audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg").contains(type)) {
+            throw new CaptureApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported audio format.");
+        }
+        try {
+            byte[] bytes = audio.getBytes();
+            return bytes.length == 0 ? null : new ValidatedAudio(bytes, type);
+        } catch (IOException exception) {
+            throw new CaptureApiException(HttpStatus.BAD_REQUEST, "Audio could not be read.", exception);
+        }
+    }
+
+    private record ValidatedAudio(byte[] bytes, String contentType) { }
 
     private CaptureLocation resolveLocation(
             Double latitude,

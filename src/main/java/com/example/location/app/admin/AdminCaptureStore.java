@@ -10,6 +10,8 @@ interface AdminCaptureStore {
 
     Optional<AdminStoredPhoto> findPhoto(String captureId);
 
+    Optional<AdminStoredAudio> findAudio(String captureId);
+
     DeleteOutcome deleteExact(String captureId);
 
     record CaptureSlice(List<AdminCaptureMetadata> content, long totalElements) {

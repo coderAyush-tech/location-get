@@ -10,6 +10,9 @@ public class CapturedPhoto {
     @Id
     private String id;
     private byte[] photo;
+    private byte[] audio;
+    private String audioContentType;
+    private long audioSizeBytes;
     private String contentType;
     private String originalFilename;
     private long sizeBytes;
@@ -32,7 +35,20 @@ public class CapturedPhoto {
             String address,
             String clientIp
     ) {
+        this(photo, contentType, originalFilename, null, null, latitude, longitude, accuracy,
+                locationSource, address, clientIp);
+    }
+
+    public CapturedPhoto(
+            byte[] photo, String contentType, String originalFilename,
+            byte[] audio, String audioContentType,
+            Double latitude, Double longitude, Double accuracy,
+            String locationSource, String address, String clientIp
+    ) {
         this.photo = photo.clone();
+        this.audio = audio == null ? null : audio.clone();
+        this.audioContentType = audioContentType;
+        this.audioSizeBytes = audio == null ? 0 : audio.length;
         this.contentType = contentType;
         this.originalFilename = originalFilename;
         this.sizeBytes = photo.length;
@@ -52,6 +68,11 @@ public class CapturedPhoto {
     public byte[] getPhoto() {
         return photo.clone();
     }
+
+    public byte[] getAudio() { return audio == null ? null : audio.clone(); }
+    public String getAudioContentType() { return audioContentType; }
+    public long getAudioSizeBytes() { return audioSizeBytes; }
+    public boolean isAudioAvailable() { return audio != null && audio.length > 0; }
 
     public String getContentType() {
         return contentType;

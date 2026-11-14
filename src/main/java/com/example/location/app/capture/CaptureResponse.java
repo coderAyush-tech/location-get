@@ -13,7 +13,8 @@ public record CaptureResponse(
         String locationSource,
         String address,
         String clientIp,
-        Instant savedAt
+        Instant savedAt,
+        boolean audioSaved
 ) {
     static CaptureResponse from(CapturedPhoto capturedPhoto) {
         return new CaptureResponse(
@@ -27,7 +28,8 @@ public record CaptureResponse(
                 capturedPhoto.getLocationSource(),
                 capturedPhoto.getAddress(),
                 capturedPhoto.getClientIp(),
-                capturedPhoto.getSavedAt()
+                capturedPhoto.getSavedAt(),
+                capturedPhoto.isAudioAvailable()
         );
     }
 }

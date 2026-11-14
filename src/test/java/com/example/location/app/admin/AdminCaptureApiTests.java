@@ -28,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class AdminCaptureApiTests {
     private static final byte[] PHOTO_BYTES = new byte[]{1, 2, 3, 4, 5};
+    private static final byte[] AUDIO_BYTES = new byte[]{8, 9, 10};
 
     private FakeAdminCaptureStore store;
     private AdminTokenService tokenService;
@@ -122,6 +123,16 @@ class AdminCaptureApiTests {
     }
 
     @Test
+    void authorizedAudioReturnsStoredBytesAndMimeType() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/captures/newest-capture/audio")
+                        .header("Authorization", bearerAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("audio/webm"))
+                .andExpect(content().bytes(AUDIO_BYTES))
+                .andExpect(header().string("Cache-Control", "no-store, private"));
+    }
+
+    @Test
     void missingPhotoReturnsNotFoundProblem() throws Exception {
         mockMvc.perform(get("/api/v1/admin/captures/missing/photo")
                         .header("Authorization", bearerAdmin()))
@@ -196,7 +207,8 @@ class AdminCaptureApiTests {
                     "ip",
                     "Delhi, Delhi, India",
                     "203.0.113.5",
-                    Instant.parse("2026-08-02T12:30:00Z")
+                    Instant.parse("2026-08-02T12:30:00Z"),
+                    true
             );
             return new CaptureSlice(List.of(newest), 3);
         }
@@ -212,6 +224,12 @@ class AdminCaptureApiTests {
                 return Optional.empty();
             }
             return Optional.of(new AdminStoredPhoto(PHOTO_BYTES, "image/jpeg", "camera.jpg"));
+        }
+
+        @Override
+        public Optional<AdminStoredAudio> findAudio(String captureId) {
+            if (!"newest-capture".equals(captureId)) return Optional.empty();
+            return Optional.of(new AdminStoredAudio(AUDIO_BYTES, "audio/webm"));
         }
 
         @Override

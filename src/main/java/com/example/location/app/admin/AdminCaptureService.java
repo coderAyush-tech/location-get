@@ -64,6 +64,11 @@ public class AdminCaptureService {
         return store.findPhoto(captureId.trim()).orElseThrow(this::notFound);
     }
 
+    public AdminStoredAudio audio(String captureId) {
+        if (captureId == null || captureId.isBlank() || captureId.length() > 200) throw notFound();
+        return store.findAudio(captureId.trim()).orElseThrow(this::notFound);
+    }
+
     private AdminCaptureItem toItem(AdminCaptureMetadata capture) {
         AddressParts addressParts = AddressParts.from(capture.address(), capture.locationSource());
         return new AdminCaptureItem(
@@ -85,7 +90,8 @@ public class AdminCaptureService {
                 addressParts.region(),
                 addressParts.country(),
                 null,
-                capture.sizeBytes() > 0
+                capture.sizeBytes() > 0,
+                capture.audioAvailable()
         );
     }
 

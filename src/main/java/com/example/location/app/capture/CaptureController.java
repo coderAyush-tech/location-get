@@ -25,6 +25,7 @@ public class CaptureController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     ResponseEntity<CaptureResponse> capture(
             @RequestParam("photo") MultipartFile photo,
+            @RequestParam(required = false) MultipartFile audio,
             @RequestParam(required = false) Double latitude,
             @RequestParam(required = false) Double longitude,
             @RequestParam(required = false) Double accuracy,
@@ -32,6 +33,7 @@ public class CaptureController {
     ) {
         CaptureResponse response = captureService.save(
                 photo,
+                audio,
                 latitude,
                 longitude,
                 accuracy,

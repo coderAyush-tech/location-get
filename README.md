@@ -50,6 +50,34 @@ The browser must show a clear disclosure before requesting camera/location
 permission and uploading. Camera and geolocation are secure-context APIs, so
 production must use HTTPS.
 
+Audio is optional and consent-based. A frontend must create a live room only
+after clear microphone consent, send `consentConfirmed: true`, stream WebM audio
+frames over `wss://<backend>/ws/live-audio`, and attach the completed recording as
+the optional `audio` multipart field on the photo capture request. Recordings are
+limited by `AUDIO_MAX_BYTES` (2 MiB by default) and are returned only through
+the authenticated admin audio endpoint. The admin live-room list and socket
+require the same short-lived admin Bearer token. The browser must visibly show
+that the microphone is live and provide a stop control.
+
+```http
+POST /api/v1/live-audio/sessions
+Content-Type: application/json
+
+{"consentConfirmed":true}
+```
+
+The response contains `sessionId` and a one-session `publishToken`. Connect to
+`/ws/live-audio`, send a JSON text frame with
+`{"role":"publisher","sessionId":"...","credential":"publishToken"}`,
+then send binary audio frames. An admin connects to the same WebSocket and sends
+`{"role":"admin","sessionId":"...","credential":"adminAccessToken"}`
+to listen. Close the room with
+`DELETE /api/v1/live-audio/sessions/{sessionId}` and the
+`X-Audio-Publish-Token` header.
+
+Admin capture list items include `audioAvailable`. Recordings are played from
+`GET /api/v1/admin/captures/{captureId}/audio` with the admin Bearer token.
+
 ## Existing location APIs
 
 - `POST /api/location`

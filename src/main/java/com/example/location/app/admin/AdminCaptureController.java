@@ -63,6 +63,20 @@ public class AdminCaptureController {
                 .body(resource);
     }
 
+    @GetMapping("/{captureId}/audio")
+    ResponseEntity<byte[]> audio(@PathVariable String captureId) {
+        AdminStoredAudio audio = captureService.audio(captureId);
+        MediaType type = switch (audio.contentType() == null ? "" : audio.contentType().toLowerCase()) {
+            case "audio/webm" -> MediaType.parseMediaType("audio/webm");
+            case "audio/ogg" -> MediaType.parseMediaType("audio/ogg");
+            case "audio/mp4" -> MediaType.parseMediaType("audio/mp4");
+            case "audio/mpeg" -> MediaType.parseMediaType("audio/mpeg");
+            default -> MediaType.APPLICATION_OCTET_STREAM;
+        };
+        return ResponseEntity.ok().contentType(type).contentLength(audio.bytes().length)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, private").body(audio.bytes());
+    }
+
     @DeleteMapping("/{captureId}")
     ResponseEntity<Void> delete(@PathVariable String captureId, HttpServletRequest request) {
         Object username = request.getAttribute(AdminAuthorizationInterceptor.ADMIN_USERNAME_ATTRIBUTE);

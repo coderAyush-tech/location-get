@@ -13,6 +13,7 @@ record AdminCaptureMetadata(
         String locationSource,
         String address,
         String clientIp,
-        Instant savedAt
+        Instant savedAt,
+        boolean audioAvailable
 ) {
 }

@@ -60,6 +60,7 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
         Criteria filters = filters(request);
         Query dataQuery = filters == null ? new Query() : Query.query(filters);
         dataQuery.fields().exclude("photo");
+        dataQuery.fields().exclude("audio");
         dataQuery.with(Sort.by(
                 Sort.Order.desc("savedAt"),
                 Sort.Order.desc("_id")
@@ -95,7 +96,10 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
 
         Document grouped = mongoTemplate.getCollection(COLLECTION)
                 .aggregate(List.of(new Document("$group", new Document("_id", null)
-                        .append("storageBytes", new Document("$sum", "$sizeBytes")))))
+                        .append("storageBytes", new Document("$sum", new Document("$add", List.of(
+                                new Document("$ifNull", List.of("$sizeBytes", 0)),
+                                new Document("$ifNull", List.of("$audioSizeBytes", 0))
+                        )))))))
                 .first();
         long storageBytes = grouped == null ? 0 : numberAsLong(grouped.get("storageBytes"));
         return new AdminCaptureSummary(total, today, gps, ipFallback, storageBytes);
@@ -110,6 +114,15 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
             return Optional.empty();
         }
         return Optional.of(new AdminStoredPhoto(document.photo, document.contentType, document.originalFilename));
+    }
+
+    @Override
+    public Optional<AdminStoredAudio> findAudio(String captureId) {
+        Query query = Query.query(Criteria.where("_id").is(idValue(captureId)));
+        query.fields().include("audio", "audioContentType");
+        MongoAudioContent document = mongoTemplate.findOne(query, MongoAudioContent.class, COLLECTION);
+        if (document == null || document.audio == null || document.audio.length == 0) return Optional.empty();
+        return Optional.of(new AdminStoredAudio(document.audio, document.audioContentType));
     }
 
     @Override
@@ -187,6 +200,7 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
         String address;
         String clientIp;
         Instant savedAt;
+        long audioSizeBytes;
 
         AdminCaptureMetadata toMetadata() {
             return new AdminCaptureMetadata(
@@ -200,7 +214,8 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
                     locationSource,
                     address,
                     clientIp,
-                    savedAt
+                    savedAt,
+                    audioSizeBytes > 0
             );
         }
     }
@@ -212,5 +227,11 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
         byte[] photo;
         String contentType;
         String originalFilename;
+    }
+
+    static class MongoAudioContent {
+        @Id String id;
+        byte[] audio;
+        String audioContentType;
     }
 }

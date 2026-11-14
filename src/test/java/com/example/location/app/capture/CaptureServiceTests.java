@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -61,6 +62,29 @@ class CaptureServiceTests {
         verify(repository).save(captor.capture());
         assertArrayEquals(ONE_PIXEL_PNG, captor.getValue().getPhoto());
         assertEquals("106.222.248.114", captor.getValue().getClientIp());
+    }
+
+    @Test
+    void savesBoundedAudioRecordingAlongsidePhoto() {
+        MockMultipartFile audio = new MockMultipartFile("audio", "voice.webm", "audio/webm", new byte[]{1, 2, 3});
+
+        CaptureResponse response = service.save(photo, audio, 28.6, 77.2, 10.0, "106.222.248.114");
+
+        assertTrue(response.audioSaved());
+        ArgumentCaptor<CapturedPhoto> captor = ArgumentCaptor.forClass(CapturedPhoto.class);
+        verify(repository).save(captor.capture());
+        assertArrayEquals(new byte[]{1, 2, 3}, captor.getValue().getAudio());
+        assertEquals("audio/webm", captor.getValue().getAudioContentType());
+        assertEquals(3, captor.getValue().getAudioSizeBytes());
+    }
+
+    @Test
+    void rejectsUnsupportedAudioTypeWithoutSavingPhoto() {
+        MockMultipartFile audio = new MockMultipartFile("audio", "voice.bin", "application/octet-stream", new byte[]{1});
+
+        assertThrows(CaptureApiException.class,
+                () -> service.save(photo, audio, 28.6, 77.2, 10.0, "106.222.248.114"));
+        verify(repository, never()).save(any());
     }
 
     @Test
