@@ -1,6 +1,7 @@
 package com.example.location.app.admin;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -10,6 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 
 class AdminBeanWiringTests {
+    @Test
+    void gridFsStoreExplicitlySelectsItsMongoConstructor() throws NoSuchMethodException {
+        assertNotNull(GridFsVideoStore.class
+                .getConstructor(MongoDatabaseFactory.class, MongoTemplate.class)
+                .getAnnotation(Autowired.class));
+    }
+
     @Test
     void springCanSelectProductionConstructors() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {

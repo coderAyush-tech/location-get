@@ -11,6 +11,7 @@ import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -36,6 +37,7 @@ public class GridFsVideoStore {
     private final MongoTemplate mongoTemplate;
     private final ConcurrentMap<String, MongoWriter> active = new ConcurrentHashMap<>();
 
+    @Autowired
     public GridFsVideoStore(MongoDatabaseFactory databaseFactory, MongoTemplate mongoTemplate) {
         MongoDatabase database = databaseFactory.getMongoDatabase();
         this.bucket = GridFSBuckets.create(database, BUCKET_NAME);
