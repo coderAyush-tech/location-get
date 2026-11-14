@@ -29,12 +29,13 @@ public class LiveAudioSessionController {
     void close(
             @PathVariable String sessionId,
             @RequestHeader("X-Audio-Publish-Token") String token,
-            @RequestHeader("X-Audio-Last-Chunk-Sequence") long lastChunkSequence
+            @RequestHeader(value = "X-Audio-Last-Chunk-Sequence", required = false) Long lastChunkSequence
     ) {
         LiveAudioRooms.CloseResult result = rooms.close(sessionId, token, lastChunkSequence);
         switch (result) {
             case CLOSED, ALREADY_CLOSED -> { }
             case INVALID_TOKEN -> throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            case NOT_FOUND -> throw new ResponseStatusException(HttpStatus.NOT_FOUND);
             case INVALID_SEQUENCE -> throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "Last chunk sequence must be non-negative.");
             case SEQUENCE_MISMATCH -> throw new ResponseStatusException(

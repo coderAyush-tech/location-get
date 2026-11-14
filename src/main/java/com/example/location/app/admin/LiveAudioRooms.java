@@ -65,15 +65,21 @@ public class LiveAudioRooms {
         return result == CloseResult.CLOSED || result == CloseResult.ALREADY_CLOSED;
     }
 
-    public CloseResult close(String id, String token, long lastChunkSequence) {
-        if (lastChunkSequence < 0) return CloseResult.INVALID_SEQUENCE;
+    public CloseResult close(String id, String token, Long lastChunkSequence) {
+        if (lastChunkSequence != null && lastChunkSequence < 0) return CloseResult.INVALID_SEQUENCE;
         Room room = rooms.get(id);
         // Keep closed-room tombstones briefly so repeated DELETEs can validate their sequence.
-        if (room == null) return CloseResult.ALREADY_CLOSED;
+        if (room == null) return CloseResult.NOT_FOUND;
         if (!room.matches(token)) return CloseResult.INVALID_TOKEN;
 
-        CloseResult result = room.closeAfterSequence(lastChunkSequence, CLOSE_BARRIER_TIMEOUT_MILLIS);
-        return result;
+        synchronized (room) {
+            // Older clients do not send an ACK sequence. Close against the last chunk that
+            // the server has actually appended while holding the same per-room barrier.
+            long expectedSequence = lastChunkSequence == null
+                    ? room.persistedSequence()
+                    : lastChunkSequence;
+            return room.closeAfterSequence(expectedSequence, CLOSE_BARRIER_TIMEOUT_MILLIS);
+        }
     }
 
     public String recordingId(String id, String token) {
@@ -120,6 +126,7 @@ public class LiveAudioRooms {
         CLOSED,
         ALREADY_CLOSED,
         INVALID_TOKEN,
+        NOT_FOUND,
         INVALID_SEQUENCE,
         SEQUENCE_MISMATCH,
         SEQUENCE_TIMEOUT

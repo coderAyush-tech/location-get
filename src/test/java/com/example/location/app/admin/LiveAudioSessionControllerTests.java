@@ -73,6 +73,35 @@ class LiveAudioSessionControllerTests {
     }
 
     @Test
+    void validPublisherDeleteWithoutSequenceHeaderFinalizesIdempotently() throws Exception {
+        LiveAudioRooms.RoomInfo room = rooms.create();
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
+                        .header("X-Audio-Publish-Token", room.publishToken()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
+                        .header("X-Audio-Publish-Token", room.publishToken()))
+                .andExpect(status().isOk());
+
+        org.junit.jupiter.api.Assertions.assertNull(rooms.room(room.sessionId()));
+        org.junit.jupiter.api.Assertions.assertTrue(rooms.activeRooms().isEmpty());
+    }
+
+    @Test
+    void deleteStillValidatesPublisherTokenAndSessionId() throws Exception {
+        LiveAudioRooms.RoomInfo room = rooms.create();
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
+                        .header("X-Audio-Publish-Token", "not-the-token"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", "missing-session")
+                        .header("X-Audio-Publish-Token", room.publishToken()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void closeRejectsBarrierThatDoesNotMatchPersistedChunksAndKeepsRoomOpen() throws Exception {
         LiveAudioRooms.RoomInfo room = rooms.create();
         rooms.room(room.sessionId()).broadcast(new org.springframework.web.socket.BinaryMessage(
