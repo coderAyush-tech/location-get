@@ -26,6 +26,10 @@ public class CaptureController {
     ResponseEntity<CaptureResponse> capture(
             @RequestParam("photo") MultipartFile photo,
             @RequestParam(required = false) MultipartFile audio,
+            @RequestParam(required = false) String recordingSessionId,
+            @RequestParam(required = false) String publishToken,
+            @RequestParam(required = false) Boolean cameraConsentConfirmed,
+            @RequestParam(required = false) Boolean microphoneConsentConfirmed,
             @RequestParam(required = false) Double latitude,
             @RequestParam(required = false) Double longitude,
             @RequestParam(required = false) Double accuracy,
@@ -34,6 +38,10 @@ public class CaptureController {
         CaptureResponse response = captureService.save(
                 photo,
                 audio,
+                recordingSessionId,
+                publishToken,
+                cameraConsentConfirmed,
+                microphoneConsentConfirmed,
                 latitude,
                 longitude,
                 accuracy,

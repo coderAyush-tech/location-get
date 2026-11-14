@@ -17,6 +17,7 @@ class AdminBeanWiringTests {
             context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
             context.registerBean(MongoTemplate.class, () -> mock(MongoTemplate.class));
             context.registerBean(MongoDatabaseFactory.class, () -> mock(MongoDatabaseFactory.class));
+            context.registerBean(GridFsVideoStore.class, () -> mock(GridFsVideoStore.class));
             context.register(AdminTokenService.class, AdminLoginRateLimiter.class, MongoAdminCaptureStore.class);
             context.refresh();
 

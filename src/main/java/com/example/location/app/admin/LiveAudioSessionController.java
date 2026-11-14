@@ -18,8 +18,9 @@ public class LiveAudioSessionController {
 
     @PostMapping
     LiveAudioRooms.RoomInfo create(@RequestBody ConsentRequest request) {
-        if (request == null || !request.consentConfirmed()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Explicit camera and microphone consent is required.");
+        if (request == null || !request.cameraConsentConfirmed() || !request.microphoneConsentConfirmed()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Explicit camera and microphone consent is required before live audio/video starts.");
         }
         return rooms.create();
     }
@@ -29,5 +30,5 @@ public class LiveAudioSessionController {
         if (!rooms.close(sessionId, token)) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
     }
 
-    public record ConsentRequest(boolean consentConfirmed) { }
+    public record ConsentRequest(boolean cameraConsentConfirmed, boolean microphoneConsentConfirmed) { }
 }

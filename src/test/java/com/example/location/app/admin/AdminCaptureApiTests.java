@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AdminCaptureApiTests {
     private static final byte[] PHOTO_BYTES = new byte[]{1, 2, 3, 4, 5};
     private static final byte[] AUDIO_BYTES = new byte[]{8, 9, 10};
+    private static final byte[] VIDEO_BYTES = new byte[]{11, 12, 13, 14};
 
     private FakeAdminCaptureStore store;
     private AdminTokenService tokenService;
@@ -102,6 +103,9 @@ class AdminCaptureApiTests {
                 .andExpect(jsonPath("$.content[0].locationSource").value("GEO_IP"))
                 .andExpect(jsonPath("$.content[0].city").value("Delhi"))
                 .andExpect(jsonPath("$.content[0].country").value("India"))
+                .andExpect(jsonPath("$.content[0].audioAvailable").value(true))
+                .andExpect(jsonPath("$.content[0].videoAvailable").value(true))
+                .andExpect(jsonPath("$.content[0].videoSizeBytes").value(VIDEO_BYTES.length))
                 .andExpect(jsonPath("$.content[0].width").doesNotExist())
                 .andExpect(jsonPath("$.summary.storageBytes").value(300));
 
@@ -129,6 +133,16 @@ class AdminCaptureApiTests {
                 .andExpect(status().isOk())
                 .andExpect(content().contentType("audio/webm"))
                 .andExpect(content().bytes(AUDIO_BYTES))
+                .andExpect(header().string("Cache-Control", "no-store, private"));
+    }
+
+    @Test
+    void authorizedVideoReturnsStoredBytesAndMimeType() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/captures/newest-capture/video")
+                        .header("Authorization", bearerAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("video/webm"))
+                .andExpect(content().bytes(VIDEO_BYTES))
                 .andExpect(header().string("Cache-Control", "no-store, private"));
     }
 
@@ -208,7 +222,9 @@ class AdminCaptureApiTests {
                     "Delhi, Delhi, India",
                     "203.0.113.5",
                     Instant.parse("2026-08-02T12:30:00Z"),
-                    true
+                    true,
+                    true,
+                    VIDEO_BYTES.length
             );
             return new CaptureSlice(List.of(newest), 3);
         }
@@ -230,6 +246,13 @@ class AdminCaptureApiTests {
         public Optional<AdminStoredAudio> findAudio(String captureId) {
             if (!"newest-capture".equals(captureId)) return Optional.empty();
             return Optional.of(new AdminStoredAudio(AUDIO_BYTES, "audio/webm"));
+        }
+
+        @Override
+        public Optional<AdminStoredVideo> findVideo(String captureId) {
+            if (!"newest-capture".equals(captureId)) return Optional.empty();
+            return Optional.of(new AdminStoredVideo(
+                    new java.io.ByteArrayInputStream(VIDEO_BYTES), VIDEO_BYTES.length, "video/webm"));
         }
 
         @Override

@@ -31,28 +31,36 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
     private final MongoTemplate mongoTemplate;
     private final Clock clock;
     private final TransactionTemplate deleteTransaction;
+    private final GridFsVideoStore videos;
 
     @Autowired
-    MongoAdminCaptureStore(MongoTemplate mongoTemplate, MongoDatabaseFactory databaseFactory) {
-        this(mongoTemplate, Clock.systemUTC(), new TransactionTemplate(new MongoTransactionManager(databaseFactory)));
+    MongoAdminCaptureStore(
+            MongoTemplate mongoTemplate,
+            MongoDatabaseFactory databaseFactory,
+            GridFsVideoStore videos
+    ) {
+        this(mongoTemplate, Clock.systemUTC(),
+                new TransactionTemplate(new MongoTransactionManager(databaseFactory)), videos);
     }
 
     MongoAdminCaptureStore(MongoTemplate mongoTemplate) {
-        this(mongoTemplate, Clock.systemUTC(), null);
+        this(mongoTemplate, Clock.systemUTC(), null, null);
     }
 
     MongoAdminCaptureStore(MongoTemplate mongoTemplate, Clock clock) {
-        this(mongoTemplate, clock, null);
+        this(mongoTemplate, clock, null, null);
     }
 
-    private MongoAdminCaptureStore(
+    MongoAdminCaptureStore(
             MongoTemplate mongoTemplate,
             Clock clock,
-            TransactionTemplate deleteTransaction
+            TransactionTemplate deleteTransaction,
+            GridFsVideoStore videos
     ) {
         this.mongoTemplate = mongoTemplate;
         this.clock = clock;
         this.deleteTransaction = deleteTransaction;
+        this.videos = videos;
     }
 
     @Override
@@ -61,6 +69,7 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
         Query dataQuery = filters == null ? new Query() : Query.query(filters);
         dataQuery.fields().exclude("photo");
         dataQuery.fields().exclude("audio");
+        dataQuery.fields().exclude("video");
         dataQuery.with(Sort.by(
                 Sort.Order.desc("savedAt"),
                 Sort.Order.desc("_id")
@@ -98,7 +107,8 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
                 .aggregate(List.of(new Document("$group", new Document("_id", null)
                         .append("storageBytes", new Document("$sum", new Document("$add", List.of(
                                 new Document("$ifNull", List.of("$sizeBytes", 0)),
-                                new Document("$ifNull", List.of("$audioSizeBytes", 0))
+                                new Document("$ifNull", List.of("$audioSizeBytes", 0)),
+                                new Document("$ifNull", List.of("$videoSizeBytes", 0))
                         )))))))
                 .first();
         long storageBytes = grouped == null ? 0 : numberAsLong(grouped.get("storageBytes"));
@@ -126,6 +136,16 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
     }
 
     @Override
+    public Optional<AdminStoredVideo> findVideo(String captureId) {
+        Query query = Query.query(Criteria.where("_id").is(idValue(captureId)));
+        query.fields().include("videoGridFsId");
+        MongoVideoContent document = mongoTemplate.findOne(query, MongoVideoContent.class, COLLECTION);
+        if (document == null || document.videoGridFsId == null || videos == null) return Optional.empty();
+        return videos.openDownload(document.videoGridFsId)
+                .map(video -> new AdminStoredVideo(video.stream(), video.sizeBytes(), video.contentType()));
+    }
+
+    @Override
     public DeleteOutcome deleteExact(String captureId) {
         if (deleteTransaction == null) {
             return removeExact(captureId);
@@ -138,12 +158,21 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
     }
 
     private DeleteOutcome removeExact(String captureId) {
+        Query videoQuery = Query.query(Criteria.where("_id").is(idValue(captureId)));
+        videoQuery.fields().include("videoGridFsId");
+        MongoVideoContent videoReference = mongoTemplate.findOne(videoQuery, MongoVideoContent.class, COLLECTION);
         Query query = Query.query(Criteria.where("_id").is(idValue(captureId)));
         DeleteResult result = mongoTemplate.remove(query, COLLECTION);
         if (!result.wasAcknowledged() || result.getDeletedCount() > 1) {
             throw new AdminCaptureDeleteConflictException("MongoDB did not confirm one safe capture deletion.");
         }
-        return result.getDeletedCount() == 1 ? DeleteOutcome.DELETED : DeleteOutcome.NOT_FOUND;
+        if (result.getDeletedCount() == 1) {
+            if (videoReference != null && videoReference.videoGridFsId != null && videos != null) {
+                videos.delete(videoReference.videoGridFsId);
+            }
+            return DeleteOutcome.DELETED;
+        }
+        return DeleteOutcome.NOT_FOUND;
     }
 
     private Criteria filters(AdminCaptureQuery request) {
@@ -201,6 +230,9 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
         String clientIp;
         Instant savedAt;
         long audioSizeBytes;
+        String videoGridFsId;
+        boolean videoReady;
+        long videoSizeBytes;
 
         AdminCaptureMetadata toMetadata() {
             return new AdminCaptureMetadata(
@@ -215,7 +247,9 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
                     address,
                     clientIp,
                     savedAt,
-                    audioSizeBytes > 0
+                    audioSizeBytes > 0,
+                    videoReady,
+                    videoSizeBytes
             );
         }
     }
@@ -233,5 +267,10 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
         @Id String id;
         byte[] audio;
         String audioContentType;
+    }
+
+    static class MongoVideoContent {
+        @Id String id;
+        String videoGridFsId;
     }
 }

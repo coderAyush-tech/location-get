@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class LiveAudioWebSocketHandler extends AbstractWebSocketHandler {
+    private static final int MAX_MEDIA_CHUNK_BYTES = 262_144;
     private final LiveAudioRooms rooms;
     private final AdminTokenService tokens;
     private final ObjectMapper mapper;
@@ -25,7 +26,7 @@ public class LiveAudioWebSocketHandler extends AbstractWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         session.setTextMessageSizeLimit(4096);
-        session.setBinaryMessageSizeLimit(65_536);
+        session.setBinaryMessageSizeLimit(MAX_MEDIA_CHUNK_BYTES);
     }
 
     @Override
@@ -52,14 +53,19 @@ public class LiveAudioWebSocketHandler extends AbstractWebSocketHandler {
     @Override
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
         LiveAudioRooms.Room room = authenticated.get(session.getId());
-        if (room != null && room.isPublisher(session) && message.getPayloadLength() <= 65_536) room.broadcast(message);
+        if (room != null && room.isPublisher(session)
+                && message.getPayloadLength() <= MAX_MEDIA_CHUNK_BYTES) room.broadcast(message);
         else closeQuietly(session);
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        rooms.activeRooms().forEach(room -> room.detach(session));
-        authenticated.remove(session.getId());
+        LiveAudioRooms.Room room = authenticated.remove(session.getId());
+        if (room != null && room.isPublisher(session)) {
+            rooms.publisherDisconnected(session);
+        } else if (room != null) {
+            room.detach(session);
+        }
     }
 
     private void closeQuietly(WebSocketSession session) {

@@ -14,6 +14,8 @@ record AdminCaptureMetadata(
         String address,
         String clientIp,
         Instant savedAt,
-        boolean audioAvailable
+        boolean audioAvailable,
+        boolean videoReady,
+        long videoSizeBytes
 ) {
 }

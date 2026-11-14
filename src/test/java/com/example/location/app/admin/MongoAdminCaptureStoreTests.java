@@ -11,6 +11,8 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 
 import java.util.List;
+import java.io.ByteArrayInputStream;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -57,6 +59,26 @@ class MongoAdminCaptureStoreTests {
         assertTrue(filter.toJson().contains("address"));
         assertTrue(filter.toJson().contains("locationSource"));
         assertFalse(query.getFieldsObject().isEmpty());
+        assertEquals(0, query.getFieldsObject().get("video"));
+    }
+
+    @Test
+    void streamsGridFsVideoByStoredReference() {
+        MongoAdminCaptureStore.MongoVideoContent content = new MongoAdminCaptureStore.MongoVideoContent();
+        content.videoGridFsId = "507f1f77bcf86cd799439011";
+        when(mongoTemplate.findOne(any(Query.class), eq(MongoAdminCaptureStore.MongoVideoContent.class),
+                eq("captured_photos"))).thenReturn(content);
+        GridFsVideoStore videos = org.mockito.Mockito.mock(GridFsVideoStore.class);
+        when(videos.openDownload(content.videoGridFsId)).thenReturn(Optional.of(new GridFsVideoStore.StoredVideo(
+                new ByteArrayInputStream(new byte[]{1, 2, 3}), 3, "video/webm")));
+        MongoAdminCaptureStore store = new MongoAdminCaptureStore(mongoTemplate, java.time.Clock.systemUTC(), null, videos);
+
+        AdminStoredVideo video = store.findVideo("capture-123").orElseThrow();
+
+        assertEquals("video/webm", video.contentType());
+        assertEquals(3, video.sizeBytes());
+        assertTrue(video.stream() instanceof ByteArrayInputStream);
+        verify(videos).openDownload(content.videoGridFsId);
     }
 
     @Test
@@ -73,6 +95,23 @@ class MongoAdminCaptureStoreTests {
         Document query = queryCaptor.getValue().getQueryObject();
         assertEquals(1, query.size());
         assertEquals("capture-123", query.get("_id"));
+    }
+
+    @Test
+    void deletingCaptureAlsoDeletesItsGridFsVideo() {
+        MongoAdminCaptureStore.MongoVideoContent content = new MongoAdminCaptureStore.MongoVideoContent();
+        content.videoGridFsId = "507f1f77bcf86cd799439011";
+        when(mongoTemplate.findOne(any(Query.class), eq(MongoAdminCaptureStore.MongoVideoContent.class),
+                eq("captured_photos"))).thenReturn(content);
+        when(mongoTemplate.remove(any(Query.class), eq("captured_photos")))
+                .thenReturn(DeleteResult.acknowledged(1));
+        GridFsVideoStore videos = org.mockito.Mockito.mock(GridFsVideoStore.class);
+        MongoAdminCaptureStore store = new MongoAdminCaptureStore(
+                mongoTemplate, java.time.Clock.systemUTC(), null, videos);
+
+        assertEquals(AdminCaptureStore.DeleteOutcome.DELETED, store.deleteExact("capture-123"));
+
+        verify(videos).delete(content.videoGridFsId);
     }
 
     @Test

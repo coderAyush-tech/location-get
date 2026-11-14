@@ -14,7 +14,9 @@ public record CaptureResponse(
         String address,
         String clientIp,
         Instant savedAt,
-        boolean audioSaved
+        boolean audioSaved,
+        boolean videoSaved,
+        boolean videoReady
 ) {
     static CaptureResponse from(CapturedPhoto capturedPhoto) {
         return new CaptureResponse(
@@ -29,7 +31,9 @@ public record CaptureResponse(
                 capturedPhoto.getAddress(),
                 capturedPhoto.getClientIp(),
                 capturedPhoto.getSavedAt(),
-                capturedPhoto.isAudioAvailable()
+                capturedPhoto.isAudioAvailable(),
+                capturedPhoto.isVideoAvailable(),
+                capturedPhoto.isVideoReady()
         );
     }
 }

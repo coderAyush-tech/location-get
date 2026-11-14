@@ -50,33 +50,64 @@ The browser must show a clear disclosure before requesting camera/location
 permission and uploading. Camera and geolocation are secure-context APIs, so
 production must use HTTPS.
 
-Audio is optional and consent-based. A frontend must create a live room only
-after clear microphone consent, send `consentConfirmed: true`, stream WebM audio
-frames over `wss://<backend>/ws/live-audio`, and attach the completed recording as
-the optional `audio` multipart field on the photo capture request. Recordings are
-limited by `AUDIO_MAX_BYTES` (2 MiB by default) and are returned only through
-the authenticated admin audio endpoint. The admin live-room list and socket
-require the same short-lived admin Bearer token. The browser must visibly show
-that the microphone is live and provide a stop control.
+Live camera and microphone streaming/recording are opt-in and require explicit
+consent. Keep a visible local preview, live/recording indicator, and Stop
+control for the entire session. The recording stays active while the publisher
+WebSocket stays connected; hidden-tab capture is browser/OS-dependent and is
+not guaranteed. There is no application video-duration or video-file-size cap.
+MongoDB account storage quotas still apply. Video chunks are streamed to
+GridFS, not buffered into the photo document. A live recording is retained only
+when linked to a saved photo, and deleting that capture deletes its GridFS
+recording too.
 
 ```http
 POST /api/v1/live-audio/sessions
 Content-Type: application/json
 
-{"consentConfirmed":true}
+{"cameraConsentConfirmed":true,"microphoneConsentConfirmed":true}
 ```
 
-The response contains `sessionId` and a one-session `publishToken`. Connect to
-`/ws/live-audio`, send a JSON text frame with
+The response contains `sessionId`, a one-session `publishToken`, and `mediaType`.
+Use `video/webm;codecs=vp8,opus` and about 500 ms chunks (each WebSocket frame
+must be under 256 KiB). After opening the publisher WebSocket, immediately save
+the still photo and attach the active session credentials to that multipart
+request:
+
+```http
+POST /api/v1/captures
+Content-Type: multipart/form-data
+
+photo=<required JPEG, PNG, or WebP file>
+recordingSessionId=<sessionId>
+publishToken=<publishToken>
+cameraConsentConfirmed=true
+microphoneConsentConfirmed=true
+latitude=<optional number>
+longitude=<optional number>
+accuracy=<optional non-negative number>
+```
+
+The capture response initially has `videoSaved: true` and `videoReady: false`;
+after Stop/finalization the admin list shows the final GridFS size and the video
+can be streamed from the admin endpoint. Do not upload a video multipart blob.
+
+Connect to `/ws/live-audio`, send a JSON text frame with
 `{"role":"publisher","sessionId":"...","credential":"publishToken"}`,
-then send binary audio frames. An admin connects to the same WebSocket and sends
+then send WebM binary chunks. The first chunk initializes playback; a late admin
+listener receives it before live chunks. An admin connects to the same WebSocket
+and sends
 `{"role":"admin","sessionId":"...","credential":"adminAccessToken"}`
 to listen. Close the room with
 `DELETE /api/v1/live-audio/sessions/{sessionId}` and the
 `X-Audio-Publish-Token` header.
 
-Admin capture list items include `audioAvailable`. Recordings are played from
-`GET /api/v1/admin/captures/{captureId}/audio` with the admin Bearer token.
+The publisher must send all final `dataavailable` chunks before calling the
+session DELETE endpoint; the backend finalizes the GridFS file then. A publisher
+WebSocket disconnect also finalizes and removes the active room. Admin Stop
+Listening only closes the admin socket. Admin capture list items include
+`videoAvailable` and `videoSizeBytes`; fetch the finished video from
+`GET /api/v1/admin/captures/{captureId}/video` with the admin Bearer token and
+play the response stream. The admin token is never sent to the publisher.
 
 ## Existing location APIs
 

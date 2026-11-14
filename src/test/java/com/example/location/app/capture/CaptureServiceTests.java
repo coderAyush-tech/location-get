@@ -2,6 +2,7 @@ package com.example.location.app.capture;
 
 import com.example.location.app.GeoIpService;
 import com.example.location.app.LocationResponse;
+import com.example.location.app.admin.LiveAudioRooms;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,13 +33,15 @@ class CaptureServiceTests {
     private CapturedPhotoValidator validator;
     @Mock
     private GeoIpService geoIpService;
+    @Mock
+    private LiveAudioRooms liveAudioRooms;
 
     private CaptureService service;
     private MockMultipartFile photo;
 
     @BeforeEach
     void setUp() {
-        service = new CaptureService(repository, validator, geoIpService);
+        service = new CaptureService(repository, validator, geoIpService, liveAudioRooms, 2_097_152L);
         photo = file("camera.png", "image/png", ONE_PIXEL_PNG);
         when(validator.validate(photo)).thenReturn(new ValidatedCapture(ONE_PIXEL_PNG, "image/png"));
         lenient().when(repository.save(any(CapturedPhoto.class))).thenAnswer(invocation -> {
@@ -68,7 +71,8 @@ class CaptureServiceTests {
     void savesBoundedAudioRecordingAlongsidePhoto() {
         MockMultipartFile audio = new MockMultipartFile("audio", "voice.webm", "audio/webm", new byte[]{1, 2, 3});
 
-        CaptureResponse response = service.save(photo, audio, 28.6, 77.2, 10.0, "106.222.248.114");
+        CaptureResponse response = service.save(photo, audio, false, true,
+                28.6, 77.2, 10.0, "106.222.248.114");
 
         assertTrue(response.audioSaved());
         ArgumentCaptor<CapturedPhoto> captor = ArgumentCaptor.forClass(CapturedPhoto.class);
@@ -83,7 +87,56 @@ class CaptureServiceTests {
         MockMultipartFile audio = new MockMultipartFile("audio", "voice.bin", "application/octet-stream", new byte[]{1});
 
         assertThrows(CaptureApiException.class,
-                () -> service.save(photo, audio, 28.6, 77.2, 10.0, "106.222.248.114"));
+                () -> service.save(photo, audio, false, true,
+                        28.6, 77.2, 10.0, "106.222.248.114"));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void attachesStreamingGridFsRecordingReferenceToStillPhoto() {
+        when(liveAudioRooms.attachRecordingToCapture("session-1", "publish-secret"))
+                .thenReturn("507f1f77bcf86cd799439011");
+
+        CaptureResponse response = service.save(photo, null, "session-1", "publish-secret", true, true,
+                28.6, 77.2, 10.0, "106.222.248.114");
+
+        assertTrue(response.videoSaved());
+        assertTrue(!response.videoReady());
+        ArgumentCaptor<CapturedPhoto> captor = ArgumentCaptor.forClass(CapturedPhoto.class);
+        verify(repository).save(captor.capture());
+        assertEquals("507f1f77bcf86cd799439011", captor.getValue().getVideoGridFsId());
+        assertEquals("video/webm", captor.getValue().getVideoContentType());
+        assertEquals(0, captor.getValue().getVideoSizeBytes());
+    }
+
+    @Test
+    void refusesRecordingReferenceWithoutExplicitCameraAndMicrophoneConsent() {
+        assertThrows(CaptureApiException.class,
+                () -> service.save(photo, null, "session-1", "publish-secret", false, true,
+                        28.6, 77.2, 10.0, "106.222.248.114"));
+        assertThrows(CaptureApiException.class,
+                () -> service.save(photo, null, "session-1", "publish-secret", true, false,
+                        28.6, 77.2, 10.0, "106.222.248.114"));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void refusesAudioWithoutExplicitMicrophoneConsent() {
+        MockMultipartFile audio = new MockMultipartFile("audio", "voice.webm", "audio/webm", new byte[]{1});
+
+        assertThrows(CaptureApiException.class,
+                () -> service.save(photo, audio, false, false,
+                        28.6, 77.2, 10.0, "106.222.248.114"));
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void rejectsRecordingWithInvalidPublishToken() {
+        when(liveAudioRooms.attachRecordingToCapture("session-1", "wrong-token")).thenReturn(null);
+
+        assertThrows(CaptureApiException.class,
+                () -> service.save(photo, null, "session-1", "wrong-token", true, true,
+                        28.6, 77.2, 10.0, "106.222.248.114"));
         verify(repository, never()).save(any());
     }
 

@@ -118,6 +118,11 @@ class AdminCaptureDeleteServiceTests {
         }
 
         @Override
+        public Optional<AdminStoredVideo> findVideo(String captureId) {
+            return Optional.empty();
+        }
+
+        @Override
         public DeleteOutcome deleteExact(String captureId) {
             deleteCalls++;
             return photos.remove(captureId) == null ? DeleteOutcome.NOT_FOUND : DeleteOutcome.DELETED;

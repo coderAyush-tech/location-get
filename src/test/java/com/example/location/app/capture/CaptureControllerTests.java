@@ -45,7 +45,10 @@ class CaptureControllerTests {
                 "photo", "camera.png", "image/png", ONE_PIXEL_PNG
         );
         when(captureService.save(
-                eq(photo), org.mockito.ArgumentMatchers.isNull(), eq(28.6139), eq(77.209),
+                eq(photo), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(),
+                eq(28.6139), eq(77.209),
                 eq(12.0), eq("106.222.248.114")
         )).thenReturn(new CaptureResponse(
                 "capture-1",
@@ -59,6 +62,8 @@ class CaptureControllerTests {
                 null,
                 "106.222.248.114",
                 Instant.parse("2026-07-29T10:00:00Z"),
+                false,
+                false,
                 false
         ));
 
@@ -73,6 +78,35 @@ class CaptureControllerTests {
                 .andExpect(jsonPath("$.saved").value(true))
                 .andExpect(jsonPath("$.locationSource").value("gps"))
                 .andExpect(jsonPath("$.clientIp").value("106.222.248.114"));
+    }
+
+    @Test
+    void attachesLiveRecordingSessionWithExplicitCameraAndMicrophoneConsent() throws Exception {
+        MockMultipartFile photo = new MockMultipartFile(
+                "photo", "camera.png", "image/png", ONE_PIXEL_PNG
+        );
+        when(captureService.save(
+                eq(photo), org.mockito.ArgumentMatchers.isNull(), eq("session-1"), eq("publish-secret"), eq(true), eq(true),
+                eq(28.6139), eq(77.209), eq(12.0), eq("106.222.248.114")
+        )).thenReturn(new CaptureResponse(
+                "capture-video", true, "image/png", ONE_PIXEL_PNG.length,
+                28.6139, 77.209, 12.0, "gps", null, "106.222.248.114",
+                Instant.parse("2026-07-29T10:00:00Z"), false, true, false
+        ));
+
+        mockMvc.perform(multipart("/api/v1/captures")
+                        .file(photo)
+                        .param("recordingSessionId", "session-1")
+                        .param("publishToken", "publish-secret")
+                        .param("cameraConsentConfirmed", "true")
+                        .param("microphoneConsentConfirmed", "true")
+                        .param("latitude", "28.6139")
+                        .param("longitude", "77.209")
+                        .param("accuracy", "12")
+                        .header("X-Forwarded-For", "106.222.248.114, 10.0.0.1"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.videoSaved").value(true))
+                .andExpect(jsonPath("$.videoReady").value(false));
     }
 
     @Test

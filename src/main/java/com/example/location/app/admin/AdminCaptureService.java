@@ -69,6 +69,13 @@ public class AdminCaptureService {
         return store.findAudio(captureId.trim()).orElseThrow(this::notFound);
     }
 
+    public AdminStoredVideo video(String captureId) {
+        if (captureId == null || captureId.isBlank() || captureId.length() > 200) {
+            throw videoNotFound();
+        }
+        return store.findVideo(captureId.trim()).orElseThrow(this::videoNotFound);
+    }
+
     private AdminCaptureItem toItem(AdminCaptureMetadata capture) {
         AddressParts addressParts = AddressParts.from(capture.address(), capture.locationSource());
         return new AdminCaptureItem(
@@ -91,7 +98,9 @@ public class AdminCaptureService {
                 addressParts.country(),
                 null,
                 capture.sizeBytes() > 0,
-                capture.audioAvailable()
+                capture.audioAvailable(),
+                capture.videoReady(),
+                capture.videoSizeBytes()
         );
     }
 
@@ -124,6 +133,10 @@ public class AdminCaptureService {
 
     private AdminApiException notFound() {
         return new AdminApiException(HttpStatus.NOT_FOUND, "Photo not found", "Capture or photo was not found.");
+    }
+
+    private AdminApiException videoNotFound() {
+        return new AdminApiException(HttpStatus.NOT_FOUND, "Video not found", "Capture or video recording was not found.");
     }
 
     private record AddressParts(String city, String region, String country) {
