@@ -6,6 +6,7 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
@@ -16,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class LiveAudioRooms {
     private static final int MAX_ACTIVE_ROOMS = 100;
+    private static final long CLOSE_BARRIER_TIMEOUT_MILLIS = 10_000;
+    private static final Duration CLOSED_ROOM_RETENTION = Duration.ofHours(24);
     public static final String LIVE_MEDIA_TYPE = "video/webm;codecs=vp8,opus";
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
@@ -32,7 +35,9 @@ public class LiveAudioRooms {
     }
 
     public synchronized RoomInfo create() {
-        if (rooms.size() >= MAX_ACTIVE_ROOMS) {
+        pruneClosedRooms();
+        long activeCount = rooms.values().stream().filter(room -> !room.isClosed()).count();
+        if (activeCount >= MAX_ACTIVE_ROOMS) {
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
                     "Live audio is temporarily at capacity."
@@ -49,24 +54,35 @@ public class LiveAudioRooms {
     }
 
     public Room room(String id) {
-        return rooms.get(id);
+        Room room = rooms.get(id);
+        return room == null || room.isClosed() ? null : room;
     }
 
     public boolean close(String id, String token) {
         Room room = rooms.get(id);
         if (room == null || !room.matches(token)) return false;
-        rooms.remove(id, room);
-        room.close();
-        return true;
+        CloseResult result = close(id, token, room.persistedSequence());
+        return result == CloseResult.CLOSED || result == CloseResult.ALREADY_CLOSED;
+    }
+
+    public CloseResult close(String id, String token, long lastChunkSequence) {
+        if (lastChunkSequence < 0) return CloseResult.INVALID_SEQUENCE;
+        Room room = rooms.get(id);
+        // Keep closed-room tombstones briefly so repeated DELETEs can validate their sequence.
+        if (room == null) return CloseResult.ALREADY_CLOSED;
+        if (!room.matches(token)) return CloseResult.INVALID_TOKEN;
+
+        CloseResult result = room.closeAfterSequence(lastChunkSequence, CLOSE_BARRIER_TIMEOUT_MILLIS);
+        return result;
     }
 
     public String recordingId(String id, String token) {
-        Room room = rooms.get(id);
+        Room room = room(id);
         return room != null && room.matches(token) ? room.recordingId() : null;
     }
 
     public String attachRecordingToCapture(String id, String token) {
-        Room room = rooms.get(id);
+        Room room = room(id);
         if (room == null || !room.matches(token) || !room.attachToCapture()) return null;
         return room.recordingId();
     }
@@ -80,9 +96,8 @@ public class LiveAudioRooms {
     }
 
     public void publisherDisconnected(WebSocketSession session) {
-        for (Map.Entry<String, Room> entry : rooms.entrySet()) {
-            Room room = entry.getValue();
-            if (room.isPublisher(session) && rooms.remove(entry.getKey(), room)) {
+        for (Room room : rooms.values()) {
+            if (room.isPublisher(session)) {
                 room.close();
                 return;
             }
@@ -90,7 +105,24 @@ public class LiveAudioRooms {
     }
 
     public Set<Room> activeRooms() {
-        return Set.copyOf(rooms.values());
+        return rooms.values().stream().filter(room -> !room.isClosed()).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private void pruneClosedRooms() {
+        Instant cutoff = Instant.now().minus(CLOSED_ROOM_RETENTION);
+        rooms.entrySet().removeIf(entry -> {
+            Instant closedAt = entry.getValue().closedAt();
+            return closedAt != null && closedAt.isBefore(cutoff);
+        });
+    }
+
+    public enum CloseResult {
+        CLOSED,
+        ALREADY_CLOSED,
+        INVALID_TOKEN,
+        INVALID_SEQUENCE,
+        SEQUENCE_MISMATCH,
+        SEQUENCE_TIMEOUT
     }
 
     public record RoomInfo(String sessionId, String publishToken, String mediaType, Instant createdAt) { }
@@ -106,7 +138,9 @@ public class LiveAudioRooms {
         // data. Keep it so listeners joining later can initialize their decoder.
         private byte[] initializationChunk;
         private boolean closed;
+        private Instant closedAt;
         private boolean attachedToCapture;
+        private long persistedSequence;
         private static final int MAX_LISTENERS = 20;
         Room(String id, String publishToken, Instant createdAt, VideoRecordingWriter videoWriter) {
             this.id = id; this.publishToken = publishToken; this.createdAt = createdAt;
@@ -116,6 +150,9 @@ public class LiveAudioRooms {
         public Instant createdAt() { return createdAt; }
         public boolean matches(String token) { return publishToken.equals(token); }
         public String recordingId() { return videoWriter.id(); }
+        public synchronized long persistedSequence() { return persistedSequence; }
+        public synchronized boolean isClosed() { return closed; }
+        private synchronized Instant closedAt() { return closedAt; }
         public synchronized boolean attachToCapture() {
             if (closed || attachedToCapture) return false;
             attachedToCapture = true;
@@ -146,25 +183,61 @@ public class LiveAudioRooms {
         }
         public synchronized void close() {
             if (closed) return;
+            finishAndClose(attachedToCapture);
+        }
+        public synchronized CloseResult closeAfterSequence(long expectedSequence, long timeoutMillis) {
+            if (closed) {
+                return expectedSequence == persistedSequence
+                        ? CloseResult.ALREADY_CLOSED
+                        : CloseResult.SEQUENCE_MISMATCH;
+            }
+            if (expectedSequence < persistedSequence) return CloseResult.SEQUENCE_MISMATCH;
+
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+            while (persistedSequence < expectedSequence) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) return CloseResult.SEQUENCE_TIMEOUT;
+                try {
+                    java.util.concurrent.TimeUnit.NANOSECONDS.timedWait(this, remaining);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    return CloseResult.SEQUENCE_TIMEOUT;
+                }
+                if (closed) {
+                    return expectedSequence == persistedSequence
+                            ? CloseResult.ALREADY_CLOSED
+                            : CloseResult.SEQUENCE_MISMATCH;
+                }
+            }
+            if (persistedSequence != expectedSequence) return CloseResult.SEQUENCE_MISMATCH;
+            finishAndClose(attachedToCapture);
+            return CloseResult.CLOSED;
+        }
+        private void finishAndClose(boolean retain) {
+            if (closed) return;
             closed = true;
-            videoWriter.finish(attachedToCapture);
+            closedAt = Instant.now();
+            notifyAll();
+            videoWriter.finish(retain);
             try { if (publisher != null && publisher.isOpen()) publisher.close(); } catch (Exception ignored) { }
             for (WebSocketSession listener : listeners) {
                 try { if (listener.isOpen()) listener.close(); } catch (Exception ignored) { }
             }
             listeners.clear();
         }
-        public synchronized void broadcast(BinaryMessage message) {
-            if (closed) return;
+        public synchronized long broadcast(BinaryMessage message) {
+            if (closed) return -1;
             ByteBuffer recordingPayload = message.getPayload().asReadOnlyBuffer();
             byte[] recordingChunk = new byte[recordingPayload.remaining()];
             recordingPayload.get(recordingChunk);
             try {
                 videoWriter.append(recordingChunk);
             } catch (java.io.IOException exception) {
-                close();
-                return;
+                finishAndClose(false);
+                return -1;
             }
+            persistedSequence++;
+            notifyAll();
             if (initializationChunk == null) {
                 ByteBuffer payload = message.getPayload().asReadOnlyBuffer();
                 initializationChunk = new byte[payload.remaining()];
@@ -174,6 +247,7 @@ public class LiveAudioRooms {
                 try { if (listener.isOpen()) listener.sendMessage(new BinaryMessage(message.getPayload().asReadOnlyBuffer())); }
                 catch (Exception ignored) { listeners.remove(listener); }
             }
+            return persistedSequence;
         }
     }
 

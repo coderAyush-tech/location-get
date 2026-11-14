@@ -24,6 +24,8 @@ public record AdminCaptureItem(
         boolean photoAvailable,
         boolean audioAvailable,
         boolean videoAvailable,
+        boolean videoSaved,
+        boolean videoReady,
         long videoSizeBytes
 ) {
 }

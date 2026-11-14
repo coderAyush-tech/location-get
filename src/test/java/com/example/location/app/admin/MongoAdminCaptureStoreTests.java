@@ -29,6 +29,24 @@ class MongoAdminCaptureStoreTests {
     private MongoTemplate mongoTemplate;
 
     @Test
+    void captureListMapsGridFsReferenceAndFinalizationMetadataSeparately() {
+        MongoAdminCaptureStore.MongoCaptureMetadata document = new MongoAdminCaptureStore.MongoCaptureMetadata();
+        document.id = "capture-123";
+        document.videoGridFsId = "507f1f77bcf86cd799439011";
+        document.videoReady = false;
+        when(mongoTemplate.find(any(Query.class), eq(MongoAdminCaptureStore.MongoCaptureMetadata.class),
+                eq("captured_photos"))).thenReturn(List.of(document));
+        when(mongoTemplate.count(any(Query.class), eq("captured_photos"))).thenReturn(1L);
+        MongoAdminCaptureStore store = new MongoAdminCaptureStore(mongoTemplate);
+
+        AdminCaptureStore.CaptureSlice slice = store.find(new AdminCaptureQuery(
+                0, 20, null, AdminCaptureQuery.LocationSourceFilter.ALL));
+
+        assertEquals("507f1f77bcf86cd799439011", slice.content().get(0).videoGridFsId());
+        assertFalse(slice.content().get(0).videoReady());
+    }
+
+    @Test
     void performsSearchFilterPaginationAndNewestFirstSortInMongo() {
         when(mongoTemplate.find(any(Query.class), eq(MongoAdminCaptureStore.MongoCaptureMetadata.class),
                 eq("captured_photos"))).thenReturn(List.of());

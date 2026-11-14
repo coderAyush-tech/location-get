@@ -26,8 +26,22 @@ public class LiveAudioSessionController {
     }
 
     @DeleteMapping("/{sessionId}")
-    void close(@PathVariable String sessionId, @RequestHeader("X-Audio-Publish-Token") String token) {
-        if (!rooms.close(sessionId, token)) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    void close(
+            @PathVariable String sessionId,
+            @RequestHeader("X-Audio-Publish-Token") String token,
+            @RequestHeader("X-Audio-Last-Chunk-Sequence") long lastChunkSequence
+    ) {
+        LiveAudioRooms.CloseResult result = rooms.close(sessionId, token, lastChunkSequence);
+        switch (result) {
+            case CLOSED, ALREADY_CLOSED -> { }
+            case INVALID_TOKEN -> throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            case INVALID_SEQUENCE -> throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Last chunk sequence must be non-negative.");
+            case SEQUENCE_MISMATCH -> throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "The submitted last chunk sequence does not match persisted video chunks.");
+            case SEQUENCE_TIMEOUT -> throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Video chunks are still being persisted; retry DELETE after receiving their acknowledgements.");
+        }
     }
 
     public record ConsentRequest(boolean cameraConsentConfirmed, boolean microphoneConsentConfirmed) { }

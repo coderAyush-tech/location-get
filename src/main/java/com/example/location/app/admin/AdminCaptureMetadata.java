@@ -15,6 +15,7 @@ record AdminCaptureMetadata(
         String clientIp,
         Instant savedAt,
         boolean audioAvailable,
+        String videoGridFsId,
         boolean videoReady,
         long videoSizeBytes
 ) {

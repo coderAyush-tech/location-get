@@ -100,6 +100,8 @@ public class AdminCaptureService {
                 capture.sizeBytes() > 0,
                 capture.audioAvailable(),
                 capture.videoReady(),
+                capture.videoGridFsId() != null && !capture.videoGridFsId().isBlank(),
+                capture.videoReady(),
                 capture.videoSizeBytes()
         );
     }

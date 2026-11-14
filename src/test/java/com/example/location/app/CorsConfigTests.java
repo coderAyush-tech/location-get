@@ -36,6 +36,7 @@ class CorsConfigTests {
         assertTrue(cors.getAllowedHeaders().contains("Content-Type"));
         assertTrue(cors.getAllowedHeaders().contains("Accept"));
         assertTrue(cors.getAllowedHeaders().contains("X-Audio-Publish-Token"));
+        assertTrue(cors.getAllowedHeaders().contains("X-Audio-Last-Chunk-Sequence"));
     }
 
     @Test
@@ -72,7 +73,8 @@ class CorsConfigTests {
                 "OPTIONS", "/api/v1/live-audio/sessions/session-123");
         request.addHeader(HttpHeaders.ORIGIN, "https://bestue.netlify.app");
         request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE");
-        request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "x-audio-publish-token");
+        request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                "x-audio-publish-token,x-audio-last-chunk-sequence");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         boolean allowed = new DefaultCorsProcessor().processRequest(cors, request, response);
@@ -82,6 +84,8 @@ class CorsConfigTests {
         assertTrue(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS).contains("DELETE"));
         assertTrue(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS)
                 .toLowerCase().contains("x-audio-publish-token"));
+        assertTrue(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS)
+                .toLowerCase().contains("x-audio-last-chunk-sequence"));
     }
 
     static class TestCorsRegistry extends CorsRegistry {

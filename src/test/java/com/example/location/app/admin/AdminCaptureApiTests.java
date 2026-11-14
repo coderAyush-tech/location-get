@@ -105,6 +105,8 @@ class AdminCaptureApiTests {
                 .andExpect(jsonPath("$.content[0].country").value("India"))
                 .andExpect(jsonPath("$.content[0].audioAvailable").value(true))
                 .andExpect(jsonPath("$.content[0].videoAvailable").value(true))
+                .andExpect(jsonPath("$.content[0].videoSaved").value(true))
+                .andExpect(jsonPath("$.content[0].videoReady").value(true))
                 .andExpect(jsonPath("$.content[0].videoSizeBytes").value(VIDEO_BYTES.length))
                 .andExpect(jsonPath("$.content[0].width").doesNotExist())
                 .andExpect(jsonPath("$.summary.storageBytes").value(300));
@@ -113,6 +115,33 @@ class AdminCaptureApiTests {
         assertEquals(1, store.lastQuery.size());
         assertEquals("Delhi", store.lastQuery.query());
         assertEquals(AdminCaptureQuery.LocationSourceFilter.GEO_IP, store.lastQuery.locationSource());
+    }
+
+    @Test
+    void captureListDistinguishesAbsentProcessingAndFinalizedVideos() throws Exception {
+        store.videoGridFsId = null;
+        store.videoReady = false;
+        store.videoSizeBytes = 0;
+        assertVideoState(false, false, false);
+
+        store.videoGridFsId = "gridfs-recording-id";
+        store.videoReady = false;
+        store.videoSizeBytes = 0;
+        assertVideoState(true, false, false);
+
+        store.videoGridFsId = "gridfs-recording-id";
+        store.videoReady = true;
+        store.videoSizeBytes = VIDEO_BYTES.length;
+        assertVideoState(true, true, true);
+    }
+
+    private void assertVideoState(boolean saved, boolean ready, boolean legacyAvailable) throws Exception {
+        mockMvc.perform(get("/api/v1/admin/captures")
+                        .header("Authorization", bearerAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].videoSaved").value(saved))
+                .andExpect(jsonPath("$.content[0].videoReady").value(ready))
+                .andExpect(jsonPath("$.content[0].videoAvailable").value(legacyAvailable));
     }
 
     @Test
@@ -206,6 +235,9 @@ class AdminCaptureApiTests {
 
     private static class FakeAdminCaptureStore implements AdminCaptureStore {
         AdminCaptureQuery lastQuery;
+        String videoGridFsId = "gridfs-recording-id";
+        boolean videoReady = true;
+        long videoSizeBytes = VIDEO_BYTES.length;
 
         @Override
         public CaptureSlice find(AdminCaptureQuery query) {
@@ -223,8 +255,9 @@ class AdminCaptureApiTests {
                     "203.0.113.5",
                     Instant.parse("2026-08-02T12:30:00Z"),
                     true,
-                    true,
-                    VIDEO_BYTES.length
+                    videoGridFsId,
+                    videoReady,
+                    videoSizeBytes
             );
             return new CaptureSlice(List.of(newest), 3);
         }

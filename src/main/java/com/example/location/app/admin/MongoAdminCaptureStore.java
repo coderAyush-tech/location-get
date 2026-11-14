@@ -248,6 +248,7 @@ class MongoAdminCaptureStore implements AdminCaptureStore {
                     clientIp,
                     savedAt,
                     audioSizeBytes > 0,
+                    videoGridFsId,
                     videoReady,
                     videoSizeBytes
             );

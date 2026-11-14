@@ -51,11 +51,24 @@ public class LiveAudioWebSocketHandler extends AbstractWebSocketHandler {
     }
 
     @Override
-    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
+    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) throws Exception {
         LiveAudioRooms.Room room = authenticated.get(session.getId());
-        if (room != null && room.isPublisher(session)
-                && message.getPayloadLength() <= MAX_MEDIA_CHUNK_BYTES) room.broadcast(message);
-        else closeQuietly(session);
+        if (room == null || !room.isPublisher(session) || message.getPayloadLength() > MAX_MEDIA_CHUNK_BYTES) {
+            closeQuietly(session);
+            return;
+        }
+
+        // Serialize append + ACK with DELETE's room barrier. The sequence is acknowledged only
+        // after the binary payload has been appended to the GridFS upload stream.
+        synchronized (room) {
+            long sequence = room.broadcast(message);
+            if (sequence < 1) {
+                closeQuietly(session);
+                return;
+            }
+            session.sendMessage(new TextMessage(mapper.writeValueAsString(
+                    Map.of("type", "chunk-ack", "sequence", sequence))));
+        }
     }
 
     @Override

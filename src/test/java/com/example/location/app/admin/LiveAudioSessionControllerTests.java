@@ -58,11 +58,31 @@ class LiveAudioSessionControllerTests {
                 .andExpect(jsonPath("$[0].mediaType").value(LiveAudioRooms.LIVE_MEDIA_TYPE));
 
         mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", sessionId)
-                        .header("X-Audio-Publish-Token", publishToken))
+                        .header("X-Audio-Publish-Token", publishToken)
+                        .header("X-Audio-Last-Chunk-Sequence", "0"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", sessionId)
+                        .header("X-Audio-Publish-Token", publishToken)
+                        .header("X-Audio-Last-Chunk-Sequence", "0"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/admin/live-audio/sessions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void closeRejectsBarrierThatDoesNotMatchPersistedChunksAndKeepsRoomOpen() throws Exception {
+        LiveAudioRooms.RoomInfo room = rooms.create();
+        rooms.room(room.sessionId()).broadcast(new org.springframework.web.socket.BinaryMessage(
+                java.nio.ByteBuffer.wrap(new byte[]{1, 2, 3})));
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
+                        .header("X-Audio-Publish-Token", room.publishToken())
+                        .header("X-Audio-Last-Chunk-Sequence", "0"))
+                .andExpect(status().isConflict());
+
+        org.junit.jupiter.api.Assertions.assertNotNull(rooms.room(room.sessionId()));
     }
 }
