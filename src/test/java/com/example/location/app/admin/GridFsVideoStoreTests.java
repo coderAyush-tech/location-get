@@ -10,6 +10,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -54,5 +55,27 @@ class GridFsVideoStoreTests {
         verify(upload).abort();
         verify(upload, never()).close();
         verify(mongoTemplate, never()).updateMulti(any(Query.class), any(Update.class), eq("captured_photos"));
+    }
+
+    @Test
+    void retriesFinalizationMetadataAfterGridFsStreamWasAlreadyClosed() throws Exception {
+        GridFSBucket bucket = mock(GridFSBucket.class);
+        MongoTemplate mongoTemplate = mock(MongoTemplate.class);
+        GridFSUploadStream upload = mock(GridFSUploadStream.class);
+        when(upload.getObjectId()).thenReturn(new ObjectId("507f1f77bcf86cd799439011"));
+        when(bucket.openUploadStream(eq("session-3.webm"), any(GridFSUploadOptions.class))).thenReturn(upload);
+        when(mongoTemplate.updateMulti(any(Query.class), any(Update.class), eq("captured_photos")))
+                .thenThrow(new IllegalStateException("temporary database failure"))
+                .thenReturn(null);
+        GridFsVideoStore store = new GridFsVideoStore(bucket, mongoTemplate);
+        VideoRecordingWriter writer = store.open("session-3", "secret-token");
+        writer.append(new byte[]{1, 2, 3});
+
+        assertThrows(IllegalStateException.class, () -> writer.finish(true));
+        writer.finish(true);
+
+        verify(upload).close();
+        verify(mongoTemplate, org.mockito.Mockito.times(2))
+                .updateMulti(any(Query.class), any(Update.class), eq("captured_photos"));
     }
 }

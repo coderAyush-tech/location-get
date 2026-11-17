@@ -138,6 +138,7 @@ public class GridFsVideoStore {
         private final GridFSUploadStream stream;
         private final String id;
         private long bytesWritten;
+        private boolean streamClosed;
         private boolean done;
 
         private MongoWriter(GridFSUploadStream stream) {
@@ -159,13 +160,16 @@ public class GridFsVideoStore {
         @Override
         public synchronized void finish(boolean retain) {
             if (done) return;
-            done = true;
-            active.remove(id, this);
             if (!retain || bytesWritten == 0) {
                 stream.abort();
+                done = true;
+                active.remove(id, this);
                 return;
             }
-            stream.close();
+            if (!streamClosed) {
+                stream.close();
+                streamClosed = true;
+            }
             try {
                 mongoTemplate.updateMulti(
                         Query.query(Criteria.where("videoGridFsId").is(id)),
@@ -173,8 +177,14 @@ public class GridFsVideoStore {
                         "captured_photos"
                 );
             } catch (RuntimeException exception) {
-                log.error("VIDEO_RECORDING_METADATA_UPDATE_FAILED gridFsId={} sizeBytes={}", id, bytesWritten);
+                // Keep the writer retryable: an idempotent session DELETE can retry this
+                // metadata update without closing the already-completed GridFS stream again.
+                log.error("VIDEO_RECORDING_METADATA_UPDATE_FAILED gridFsId={} sizeBytes={} exceptionType={}",
+                        id, bytesWritten, exception.getClass().getSimpleName());
+                throw exception;
             }
+            done = true;
+            active.remove(id, this);
             log.info("VIDEO_RECORDING_SAVED gridFsId={} sizeBytes={}", id, bytesWritten);
         }
 

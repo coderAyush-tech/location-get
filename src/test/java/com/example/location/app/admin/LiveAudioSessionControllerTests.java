@@ -73,15 +73,17 @@ class LiveAudioSessionControllerTests {
     }
 
     @Test
-    void validPublisherDeleteWithoutSequenceHeaderFinalizesIdempotently() throws Exception {
+    void validPublisherDeleteWithZeroAcknowledgedChunksFinalizesIdempotently() throws Exception {
         LiveAudioRooms.RoomInfo room = rooms.create();
 
         mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
-                        .header("X-Audio-Publish-Token", room.publishToken()))
+                        .header("X-Audio-Publish-Token", room.publishToken())
+                        .header("X-Audio-Last-Chunk-Sequence", "0"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
-                        .header("X-Audio-Publish-Token", room.publishToken()))
+                        .header("X-Audio-Publish-Token", room.publishToken())
+                        .header("X-Audio-Last-Chunk-Sequence", "0"))
                 .andExpect(status().isOk());
 
         org.junit.jupiter.api.Assertions.assertNull(rooms.room(room.sessionId()));
@@ -94,11 +96,35 @@ class LiveAudioSessionControllerTests {
 
         mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
                         .header("X-Audio-Publish-Token", "not-the-token"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
+                        .header("X-Audio-Last-Chunk-Sequence", "0"))
+                .andExpect(status().isUnauthorized());
 
         mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", "missing-session")
-                        .header("X-Audio-Publish-Token", room.publishToken()))
+                        .header("X-Audio-Publish-Token", room.publishToken())
+                        .header("X-Audio-Last-Chunk-Sequence", "0"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void malformedOrMissingSequenceReturnsClearClientErrorInsteadOfSpringBinding400() throws Exception {
+        LiveAudioRooms.RoomInfo room = rooms.create();
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
+                        .header("X-Audio-Publish-Token", room.publishToken()))
+                .andExpect(status().isPreconditionRequired());
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
+                        .header("X-Audio-Publish-Token", room.publishToken())
+                        .header("X-Audio-Last-Chunk-Sequence", "not-a-number"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(delete("/api/v1/live-audio/sessions/{sessionId}", room.sessionId())
+                        .header("X-Audio-Publish-Token", room.publishToken())
+                        .header("X-Audio-Last-Chunk-Sequence", "0"))
+                .andExpect(status().isOk());
     }
 
     @Test

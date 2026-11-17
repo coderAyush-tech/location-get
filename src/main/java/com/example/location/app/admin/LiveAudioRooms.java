@@ -58,27 +58,27 @@ public class LiveAudioRooms {
         return room == null || room.isClosed() ? null : room;
     }
 
-    public boolean close(String id, String token) {
+    public boolean sessionExists(String id) {
+        return rooms.containsKey(id);
+    }
+
+    public boolean isPublishTokenValid(String id, String token) {
         Room room = rooms.get(id);
-        if (room == null || !room.matches(token)) return false;
-        CloseResult result = close(id, token, room.persistedSequence());
-        return result == CloseResult.CLOSED || result == CloseResult.ALREADY_CLOSED;
+        return room != null && room.matches(token);
     }
 
     public CloseResult close(String id, String token, Long lastChunkSequence) {
-        if (lastChunkSequence != null && lastChunkSequence < 0) return CloseResult.INVALID_SEQUENCE;
+        if (lastChunkSequence == null) return CloseResult.SEQUENCE_REQUIRED;
+        if (lastChunkSequence < 0) return CloseResult.INVALID_SEQUENCE;
         Room room = rooms.get(id);
         // Keep closed-room tombstones briefly so repeated DELETEs can validate their sequence.
         if (room == null) return CloseResult.NOT_FOUND;
         if (!room.matches(token)) return CloseResult.INVALID_TOKEN;
 
         synchronized (room) {
-            // Older clients do not send an ACK sequence. Close against the last chunk that
-            // the server has actually appended while holding the same per-room barrier.
-            long expectedSequence = lastChunkSequence == null
-                    ? room.persistedSequence()
-                    : lastChunkSequence;
-            return room.closeAfterSequence(expectedSequence, CLOSE_BARRIER_TIMEOUT_MILLIS);
+            // The caller supplies the last chunk ACKed only after GridFS append. Waiting for
+            // this exact sequence under the room monitor closes the HTTP/WebSocket race.
+            return room.closeAfterSequence(lastChunkSequence, CLOSE_BARRIER_TIMEOUT_MILLIS);
         }
     }
 
@@ -127,6 +127,7 @@ public class LiveAudioRooms {
         ALREADY_CLOSED,
         INVALID_TOKEN,
         NOT_FOUND,
+        SEQUENCE_REQUIRED,
         INVALID_SEQUENCE,
         SEQUENCE_MISMATCH,
         SEQUENCE_TIMEOUT
@@ -222,10 +223,12 @@ public class LiveAudioRooms {
         }
         private void finishAndClose(boolean retain) {
             if (closed) return;
+            // Do not mark the room closed until GridFS finalization succeeds. A transient
+            // store failure can then be retried by an idempotent DELETE.
+            videoWriter.finish(retain);
             closed = true;
             closedAt = Instant.now();
             notifyAll();
-            videoWriter.finish(retain);
             try { if (publisher != null && publisher.isOpen()) publisher.close(); } catch (Exception ignored) { }
             for (WebSocketSession listener : listeners) {
                 try { if (listener.isOpen()) listener.close(); } catch (Exception ignored) { }

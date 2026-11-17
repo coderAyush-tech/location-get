@@ -39,9 +39,11 @@ class LiveAudioRoomsTests {
 
         assertNotNull(first.sessionId());
         assertNotEquals(first.publishToken(), second.publishToken());
-        assertFalse(rooms.close(first.sessionId(), "wrong-token"));
+        assertEquals(LiveAudioRooms.CloseResult.INVALID_TOKEN,
+                rooms.close(first.sessionId(), "wrong-token", 0L));
         assertNotNull(rooms.room(first.sessionId()));
-        assertTrue(rooms.close(first.sessionId(), first.publishToken()));
+        assertEquals(LiveAudioRooms.CloseResult.CLOSED,
+                rooms.close(first.sessionId(), first.publishToken(), 0L));
         assertNull(rooms.room(first.sessionId()));
     }
 
@@ -85,7 +87,8 @@ class LiveAudioRoomsTests {
         assertTrue(room.isPublisher(publisher));
 
         // Publisher Stop uses its token, closes the room, and removes it from active rooms.
-        assertTrue(rooms.close(info.sessionId(), info.publishToken()));
+        assertEquals(LiveAudioRooms.CloseResult.CLOSED,
+                rooms.close(info.sessionId(), info.publishToken(), 2L));
         assertNull(rooms.room(info.sessionId()));
         assertTrue(rooms.activeRooms().isEmpty());
         verify(publisher).close();
