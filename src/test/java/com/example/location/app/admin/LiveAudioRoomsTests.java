@@ -100,15 +100,15 @@ class LiveAudioRoomsTests {
         assertEquals(1, room.broadcast(binary(new byte[]{1, 2, 3})));
 
         assertEquals(LiveAudioRooms.CloseResult.SEQUENCE_MISMATCH,
-                rooms.close(info.sessionId(), info.publishToken(), 0));
+                rooms.close(info.sessionId(), info.publishToken(), 0L));
         assertNotNull(rooms.room(info.sessionId()));
 
         assertEquals(LiveAudioRooms.CloseResult.CLOSED,
-                rooms.close(info.sessionId(), info.publishToken(), 1));
+                rooms.close(info.sessionId(), info.publishToken(), 1L));
         assertEquals(LiveAudioRooms.CloseResult.ALREADY_CLOSED,
-                rooms.close(info.sessionId(), info.publishToken(), 1));
+                rooms.close(info.sessionId(), info.publishToken(), 1L));
         assertEquals(LiveAudioRooms.CloseResult.SEQUENCE_MISMATCH,
-                rooms.close(info.sessionId(), info.publishToken(), 0));
+                rooms.close(info.sessionId(), info.publishToken(), 0L));
         assertNull(rooms.room(info.sessionId()));
         assertTrue(rooms.activeRooms().isEmpty());
     }
